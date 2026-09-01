@@ -1,0 +1,19 @@
+[package]
+name = "arca-exec-abi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "trait Executor, AppHandle, eventos de ciclo de vida"
+
+[dependencies]
+arca-pkg-model = { path = "../L0-arca-pkg-model" }
+arca-protocol = { path = "../L0-arca-protocol" }
+arca-types = { path = "../L0-arca-types" }
+# ADR-014: logging obligatorio (detalle dinámico de errores de contexto
+# estático). Misma excepción documentada que T07 (arca-store).
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

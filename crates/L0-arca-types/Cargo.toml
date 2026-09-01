@@ -1,0 +1,21 @@
+[package]
+name = "arca-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "ids, versiones, errores base (raíz del grafo Arca)"
+
+[features]
+# Derives rkyv para los tipos POD (los usa arca-protocol por wire AIPC).
+# Opt-in: el build por defecto de arca-types sigue SIN rkyv (spec 01 intacta).
+rkyv = ["dep:rkyv"]
+
+[dependencies]
+blake3 = { workspace = true }
+hex = { workspace = true }
+rkyv = { workspace = true, optional = true }
+serde = { workspace = true }
+smol_str = { workspace = true, features = ["serde"] }
+thiserror = { workspace = true }

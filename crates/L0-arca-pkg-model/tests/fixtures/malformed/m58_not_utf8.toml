@@ -1,0 +1,4 @@
+# MALFORMED (m58_not_utf8.toml): no es UTF-8 -> NotUtf8
+[package]
+id = "dev.x.y"
+ÿþÿ

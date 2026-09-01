@@ -1,0 +1,10 @@
+[package]
+name = "arca-input"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "conversión eventos Android→slots"
+
+[dependencies]

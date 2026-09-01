@@ -1,0 +1,25 @@
+[package]
+name = "devapp-hello"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "binario de probe F0: heartbeat + SIGTERM + pong (gate GO/NO-GO)"
+
+[[bin]]
+name = "devapp-hello"
+path = "src/main.rs"
+
+# NOTA(agent T02): `libc` va como dependencia LOCAL con versión explícita
+# (el Cargo.toml raíz del workspace es intocable: otros agentes en paralelo).
+# La tarea pedía "0.3", pero libc 0.3 NO existe en crates.io (la serie estable
+# es 0.2.x; 1.0 está solo en alpha). Se fija 0.2.189 — exactamente la versión
+# presente en la cache local de cargo, para que `cargo build -p devapp-hello`
+# funcione también sin red.
+[dependencies]
+libc = "0.2.189"
+
+# El cross a aarch64-linux-android (estático-PIE) lo ejecuta el usuario desde
+# Deepin con cargo-ndk + NDK — ver README.md §"Compilación para Android".
+# En PC (Linux) compila para host y sirve para probar el protocolo del probe.

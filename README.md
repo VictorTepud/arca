@@ -1,122 +1,63 @@
-# Arca — paquete F0-F2 (r3): motor corregido + sonda Android + script único
+# Arca — código fuente
 
-## La buena noticia primero
+Contenedor de sub-apps Rust para Android. Blueprint: `../arca-blueprint/`.
 
-Tu prueba anterior ya respondió la pregunta **más importante** de todo el
-proyecto: ejecutaste la sub-app desde el APK en tu teléfono y salió
-`exit code = 0`. Eso significa que **Android te deja lanzar binarios Rust
-estáticos desde dentro de una app con targetSdk 28**. El gran riesgo del
-proyecto ya pasó: **Arca es viable (F0 = GO)**.
+## Estado (F0+F1+F2 implementadas, PC-verificables)
 
-Este paquete reúne todo en uno:
+| Fase | Estado | Contenido |
+|---|---|---|
+| F0 (T01) | ✔ | Workspace 33 crates, justfile, check-graphs, toolchain fijado |
+| F0 (T02) | ⏳ código listo | `host-probe/` (APK targetSdk 28) + `devapp-hello` — **ejecutar en tu teléfono = gate GO/NO-GO** |
+| F1 (T03-T09) | ✔ | types, pkg-model, 7z, sign, store, installer, tools-pk — pipeline `.arca` completo |
+| F2 (T10-T16) | ✔ | **protocol, shm, ipc, exec-abi, permissions, exec-native, rt** — ejecución nativa headless con sandbox seccomp REAL |
 
-- el **motor corregido (r2)**: los 2 tests que fallaban en tu PC ya pasan;
-- la **sonda Android**: un APK (*Arca Probe F0*) que corre las mismas 6
-  pruebas, pero **en tu teléfono**;
-- **`arca.sh`**: un solo script que hace todo — instala dependencias,
-  compila, arma el APK, lo instala, corre la sonda y guarda los logs.
+- **315 tests verdes** · `clippy -D warnings` verde · grafo sin ciclos (`scripts/check-graphs.py`)
+- E2E del backend nativo (PC): spawn → handshake → **ping p99 = 22 µs** (presupuesto 1 ms) → kill-9 → Dead ≤ 50 ms; 100 spawns sin zombis; **seccomp probado** (socket() → SIGSYS); panic de app → exit 101.
+- **r4 (fix e2e flaky, worklog T17)**: las dos e2e que fallaban en Deepin
+  (`e2e_panic_de_la_app_exit_101`, `e2e_spawn_handshake_ping_kill9_dead`)
+  tenían causa raíz: env del hijo contaminado entre tests paralelos +
+  latencia de detección de muerte por polling. Arreglado de raíz (LaunchSpec
+  v2 hermética + waitpid bloqueante). Verificado 6/6 ×5 corridas, incluso
+  con la CPU al 100%.
 
-## Requisitos
-
-- Tu Deepin con internet (la primera vez descarga JDK, SDK de Android y
-  Gradle; luego queda cacheado en `.arca-tools/`).
-- Un Android 10 o mayor, con **Depuración USB** activada, y su cable.
-- Unos 2 GB libres en el disco.
-
-## El camino corto (un solo comando)
+## Uso rápido (PC/Deepin) — TODO EN UNO
 
 ```bash
-cd arca-src-f0-f2-r3
-./arca.sh todo
+./arca.sh todo      # deps + 6 e2e en PC + APK + install + run + logs
+./arca.sh logs      # guarda logs/arca-logs-*.txt (el archivo para reportar)
 ```
 
-Eso hace todo en orden: dependencias → 6 tests del motor en tu PC →
-compilación para 3 arquitecturas (sin NDK: usa el enlazador que ya viene con
-Rust) → APK → instalación en el teléfono → la sonda corre sola en la
-pantalla → espera 45 s → guarda el registro.
+(sin NDK: el cross a arm64 usa `rust-lld`, ver `.cargo/config.toml`)
 
-Al final verás algo como `logs/arca-logs-20260902-193000.txt`.
-**Ese archivo es el que me envías** para revisar cómo estuvo.
+## Uso manual (equivalente)
 
-En la pantalla del teléfono, la última línea debería decir:
-`RESULTADO: 6 OK / 0 FALLAS (de 6)`.
+```bash
+export PATH="$HOME/.cargo/bin:$PATH"
+cargo build                                        # compila TODO (incluido arca-launch)
+cargo test --workspace                             # 315 tests (≈35 s: incluye forks reales)
 
-## Comandos por separado
-
-| comando | qué hace |
-|---|---|
-| `./arca.sh todo` | todo el flujo de arriba |
-| `./arca.sh deps` | solo instala dependencias (Rust, JDK, SDK, Gradle) |
-| `./arca.sh test` | solo los 6 tests del motor en tu PC |
-| `./arca.sh build` | solo compila binarios (3 arquitecturas) + APK |
-| `./arca.sh install` | solo instala el APK con adb |
-| `./arca.sh run` | solo lanza la sonda en el teléfono |
-| `./arca.sh logs` | solo captura los logs a un archivo |
-| `./arca.sh limpiar` | borra compilados (conserva dependencias) |
-| `./arca.sh --skip-deps todo` | corre «todo» sin revisar dependencias |
-
-## Las 6 pruebas (las mismas en PC y en el teléfono)
-
-| # | prueba | qué demuestra |
-|---|--------|---------------|
-| 1 | spawn + handshake + ping + apagado | ciclo completo de vida de una sub-app |
-| 2 | logs drenados | los logs del «cartucho» llegan etiquetados, con su pid |
-| 3 | 25 spawns sin zombis | encender y apagar muchas veces sin ensuciar el sistema |
-| 4 | pánico → exit 101 | una sub-app que revienta muere sola y ordenada |
-| 5 | kill -9 → enterrado | aunque la maten a lo bestia, no queda zombi |
-| 6 | canal cerrado → exit 0 | si el supervisor desaparece, la sub-app se apaga sola |
-
-## Si algo falla
-
-1. **«no hay teléfono conectado»** → activa Depuración USB (Ajustes →
-   Acerca del teléfono → toca 7 veces «Número de compilación» → Ajustes →
-   Opciones de desarrollador → Depuración USB), conecta y acepta el cuadro
-   de «¿Permitir depuración USB?».
-2. **Fallo al instalar** → si había un APK viejo con otra firma, el script
-   lo desinstala y reintenta solo.
-3. Cualquier otra cosa: corre `./arca.sh logs` y **envíame el archivo** que
-   genera. Con eso veo exactamente qué pasó.
-
-## Qué hay adentro
-
-```
-arca-src-f0-f2-r3/
-├── arca.sh                  # EL script (todo en uno)
-├── Cargo.toml               # workspace Rust (4 crates en capas)
-├── .cargo/config.toml       # enlazado cruzado sin NDK (rust-lld)
-├── crates/
-│   ├── arca-log/            # L0: mini-logger estilo tracing
-│   ├── arca-ipc/            # L0: protocolo AIPC (tramas tag+len)
-│   ├── arca-rt/             # L1: runtime de la sub-app
-│   │   └── src/bin/arca-ping.rs   # la sub-app de prueba (el "devapp-hello"
-│   │                              # de antes, mejorado: canal por stdio)
-│   └── arca-exec-native/    # L2: motor del supervisor + 6 tests e2e
-├── host-probe/              # el APK Android (Java puro, sin dependencias)
-│   ├── app/build.gradle     # targetSdk 28  ← la clave de todo esto
-│   └── app/src/main/java/dev/arca/probe/
-│       ├── MainActivity.java     # botón + consola en pantalla
-│       └── NativeHost.java       # lanza arca-ping, habla AIPC, corre las 6 pruebas
-└── graphs/                  # diagramas Mermaid para ubicar errores rápido
-    ├── crates-f0-f1-r2.mmd
-    ├── motor-nativo-f0-f1-r2.mmd
-    └── android-f0-r3.mmd    # flujo completo del script en tu máquina
+# E2E del backend nativo (requiere la app de prueba ESTÁTICA — el sandbox
+# bloquea openat y una app dinámica moriría en el loader):
+rustup target add x86_64-unknown-linux-musl
+cargo build -p arca-rt --bin arca-ping --target x86_64-unknown-linux-musl
+cargo test -p arca-exec-native --test e2e -- --nocapture   # logs del hijo visibles
 ```
 
-Notas rápidas:
+Pipeline de empaquetado (F1):
 
-- La app se llama **Arca Probe F0** (paquete `dev.arca.probe`).
-- La sub-app de prueba se llama `arca-ping`: es el «devapp-hello» de la otra
-  IA, con el protocolo corregido y modo `stdio` para Android.
-- En el teléfono los logs viven en el tag `ArcaProbe` de logcat y en un
-  archivo interno; `./arca.sh logs` junta todo en un solo `.txt`.
-- El targetSdk 28 es **a propósito**: es lo que permite ejecutar binarios
-  propios. No lo subas.
-- Los primeros minutos de `./arca.sh todo` son descargas; después es rápido
-  reintentar: lo que ya se descargó no se baja de nuevo.
+```bash
+cargo run -p arca-tools-pk -- keygen --out ~/.arca/keys
+cargo run -p arca-tools-pk -- pack --src miapp/ --out miapp-1.0.0.arca --key ~/.arca/keys/signing.key --backend native
+cargo run -p arca-tools-pk -- verify --file miapp-1.0.0.arca --pubkey ~/.arca/keys/signing.pub
+```
 
-## Siguiente paso (cuando la sonda esté en verde)
+## Siguiente paso CRÍTICO (gate F0)
 
-Con `6 OK / 0 FALLAS` en tu teléfono, F0 y F1 quedan demostrados de punta a
-punta (PC y Android). Lo que sigue en el plan es **F2**: el instalador de
-paquetes `.arca` (7z + firma ed25519) y el sandbox real por sub-app
-(seccomp-BPF). Ahí ya empieza a verse «la consola con cartuchos».
+El usuario YA ejecutó devapp-hello en su teléfono (exit 0, heartbeats
+1–60) — **gate F0 = GO confirmado en hardware real**. Queda formalizarlo
+en `host-probe/decision.md` y seguir con **F3** (gfx-protocol/input/wm/
+compositor/sdk + host-core). Si FAIL → pivot WASM-first (T25).
+
+## CI local
+
+`just default` (o `scripts/ci.sh`): fmt-check + clippy -D warnings + test + check-graphs.

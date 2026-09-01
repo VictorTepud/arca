@@ -1,0 +1,17 @@
+[package]
+name = "arca-permissions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "capabilities -> seccomp-BPF (default-deny)"
+
+[dependencies]
+arca-pkg-model = { path = "../L0-arca-pkg-model" }
+arca-types = { path = "../L0-arca-types" }
+seccompiler = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+nix = { workspace = true }

@@ -1,0 +1,13 @@
+[package]
+name = "arca-shm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "memfd, ring SPSC, seqlock (frames)"
+
+[dependencies]
+arca-types = { path = "../L0-arca-types" }
+memmap2 = { workspace = true }
+nix = { workspace = true }

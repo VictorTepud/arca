@@ -1,0 +1,18 @@
+[package]
+name = "arca-ipc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "UDS framing, handshake, SCM_RIGHTS"
+
+[dependencies]
+arca-protocol = { path = "../L0-arca-protocol" }
+arca-types = { path = "../L0-arca-types" }
+nix = { workspace = true }
+rkyv = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+arca-shm = { path = "../L0-arca-shm" }

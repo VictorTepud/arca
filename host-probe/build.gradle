@@ -1,4 +1,0 @@
-// Arca host-probe (F0, r3): la app Android que lanza y vigila la sub-app Rust.
-plugins {
-    id 'com.android.application' version '8.5.2' apply false
-}

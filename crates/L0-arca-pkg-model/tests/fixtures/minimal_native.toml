@@ -1,0 +1,21 @@
+# Fixture válido mínimo: solo artefacto native, sin metadatos opcionales,
+# sin [runtime.ui] (todos los defaults), sin perms.
+[package]
+id = "dev.arca.minnative"
+name = "Min Native"
+version = "0.1.0"
+min_host = "1.0.0"
+api_level = 1
+
+[runtime]
+backend_pref = "any"
+entry = "app"
+respawn = "never"
+
+[artifacts.native]
+path = "bin/native-aarch64/app"
+sha256 = "0101010101010101010101010101010101010101010101010101010101010101"
+
+[profile]
+launch_budget_ms = 120
+max_frame_mb = 2

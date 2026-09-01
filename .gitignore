@@ -1,9 +1,15 @@
-target
-logs
-.arca-tools
-host-probe/.gradle
-host-probe/build
-host-probe/app/build
-host-probe/local.properties
-host-probe/app/src/main/assets/arca-bin/*
-!host-probe/app/src/main/assets/arca-bin/.gitkeep
+/target
+/graphs/*.autogen.dot
+*.log
+*.sqlite
+*.arca
+*.sig
+keys/
+# r4 (arca.sh)
+/.arca-tools
+/logs
+/host-probe/local.properties
+/host-probe/.gradle
+/host-probe/build
+/host-probe/app/build
+/host-probe/app/src/main/assets/devapp-hello

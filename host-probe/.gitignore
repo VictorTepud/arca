@@ -1,0 +1,11 @@
+# Gradle
+.gradle/
+build/
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# No commitear el binario del asset (se genera con cargo-ndk):
+app/src/main/assets/devapp-hello

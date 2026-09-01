@@ -1,0 +1,162 @@
+# Corpus arca-7z (T05) — generado por gen_corpus.py (py7zr)
+# py7zr 1.1.3
+ARCHIVE lzma2_p0.7z ok # LZMA2 preset 0
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE lzma2_p3.7z ok # LZMA2 preset 3
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE lzma2_p6.7z ok # LZMA2 preset 6
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE lzma2_p9.7z ok # LZMA2 preset 9 (dict 64 MiB)
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE lzma1_p6.7z ok # LZMA1 preset 6
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE copy.7z ok # COPY (store)
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE bzip2.7z ok # BZIP2
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE deflate.7z ok # DEFLATE (feature arca-7z/deflate)
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE ppmd.7z ok # PPMD
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE zstd.7z ok # ZSTD (feature arca-7z/zstd)
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE brotli.7z ok # BROTLI (feature arca-7z/brotli)
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE delta_lzma2.7z ok # DELTA+LZMA2
+ENTRY data.bin src/data.bin 150000 5757ba8040e2ed9a721285d6df1f9ce210a16601a609d6de78b16a1afd8801be
+ARCHIVE bcj_x86_lzma2.7z ok # BCJ X86+LZMA2
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ENTRY text.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ARCHIVE bcj_arm_lzma2.7z ok # BCJ ARM+LZMA2
+ENTRY armish.bin src/armish.bin 200000 4fb72889824ecb6da85e4092a80b252a640dffd8877f1db69cc308b65c118db0
+ARCHIVE bcj_armthumb_lzma2.7z ok # BCJ ARMT+LZMA2
+ENTRY armish.bin src/armish.bin 200000 4fb72889824ecb6da85e4092a80b252a640dffd8877f1db69cc308b65c118db0
+ARCHIVE bcj_ppc_lzma2.7z ok # BCJ PPC+LZMA2
+ENTRY armish.bin src/armish.bin 200000 4fb72889824ecb6da85e4092a80b252a640dffd8877f1db69cc308b65c118db0
+ARCHIVE bcj_sparc_lzma2.7z ok # BCJ SPARC+LZMA2
+ENTRY armish.bin src/armish.bin 200000 4fb72889824ecb6da85e4092a80b252a640dffd8877f1db69cc308b65c118db0
+ARCHIVE bcj_ia64_lzma2.7z ok # BCJ IA64+LZMA2
+ENTRY elfish.bin src/elfish.bin 200000 855b4f07f018535c10dbaaacd3bebaf7a0308ae11e1696cb9ae6e592287e3a8b
+ARCHIVE tree.7z ok # unicode/vacíos/depth16 + dirs
+DIR tree/d0
+DIR tree/d0/d1
+DIR tree/d0/d1/d2
+DIR tree/d0/d1/d2/d3
+DIR tree/d0/d1/d2/d3/d4
+DIR tree/d0/d1/d2/d3/d4/d5
+DIR tree/d0/d1/d2/d3/d4/d5/d6
+DIR tree/d0/d1/d2/d3/d4/d5/d6/d7
+DIR tree/d0/d1/d2/d3/d4/d5/d6/d7/d8
+DIR tree/d0/d1/d2/d3/d4/d5/d6/d7/d8/d9
+DIR tree/d0/d1/d2/d3/d4/d5/d6/d7/d8/d9/d10
+DIR tree/d0/d1/d2/d3/d4/d5/d6/d7/d8/d9/d10/d11
+DIR tree/d0/d1/d2/d3/d4/d5/d6/d7/d8/d9/d10/d11/d12
+DIR tree/d0/d1/d2/d3/d4/d5/d6/d7/d8/d9/d10/d11/d12/d13
+DIR tree/emptydir
+DIR tree/ñandú
+ENTRY tree/d0/d1/d2/d3/d4/d5/d6/d7/d8/d9/d10/d11/d12/d13/fondo.txt src/tree/d0/d1/d2/d3/d4/d5/d6/d7/d8/d9/d10/d11/d12/d13/fondo.txt 90 4f12eeb99ac8ecc717ef92478ba0dc4a73f2e16cd2f38d62533c8c852e88612e
+ENTRY tree/empty.bin src/tree/empty.bin 0 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+ENTRY tree/small.txt src/tree/small.txt 100 9cfe7faff7054298ca87557e15a10262de8d3eee77827417fbdfea1c41b9ec23
+ENTRY tree/ñandú/水.txt src/tree/ñandú/水.txt 18 db1a6d85bb880b228411bb837a5b96d8343693ddbecc6ae29afbe793695f693d
+ARCHIVE pkg_layout.7z ok # layout docs/06 (manifest primero)
+ENTRY manifest.toml src/pkg/manifest.toml 112 7aee6fdf79cae773ad580fc125cc9da0f8b91b3511927e702b6cf2a042e8a9e7
+ENTRY assets/fonts/inter.ttf src/pkg/assets/fonts/inter.ttf 50000 f0b557f006ef754b7ae19e07d10e836d9314e7e3d2ab32d585816f9817510916
+ENTRY bin/native-aarch64/app src/pkg/bin/native-aarch64/app 64016 6cec58f492cd96e9180b856625217c5b47f434a7803ba5390a2261491d5636b4
+ENTRY bin/wasm/app.wasm src/pkg/bin/wasm/app.wasm 32008 7f5004b6b4a9dca27befe56c80f9f612a4eaf48e5bbb69be48a2e1156fdede48
+ENTRY icons/icon-192.png src/pkg/icons/icon-192.png 12008 1cc2b08d23d649fcc90864d5c974a0815e0b477d3a8b9b875f09e52595de58c1
+ENTRY icons/icon-512.png src/pkg/icons/icon-512.png 30008 c2dc5b6d78eed90f7bd22e7d44e48de819cd35041cb2bd3041d3c77da05ec6f3
+ENTRY meta/build.json src/pkg/meta/build.json 39 9e15f9cdaaf9a9277207bf3fa539e1414902dba59d6d61582d92b0c7f8d76235
+ENTRY meta/graph.mmd src/pkg/meta/graph.mmd 57 1b11c122846ac26a3ff1e1f9cc45046d3064ff962aab0a2498e5b10404bb047f
+ARCHIVE many_files.7z ok # 64 archivos pequeños
+ENTRY f00.bin src/many/f00.bin 1954 a4f4a074d08ede75da4fa60f22f061dbe668d7d93dbfc3a2a86bb2a8c4bee4af
+ENTRY f01.bin src/many/f01.bin 1135 450cd113dbc30ee8e9fad4ee64f902c4c3755138b33a126922333f60594995d0
+ENTRY f02.bin src/many/f02.bin 1752 22e94f3d0b9a9653a5337600a1fe5020f73ceedac2b968f1b3b111273b845e88
+ENTRY f03.bin src/many/f03.bin 1578 2b9dd6fcaaf80f8e162275a4c8f51bc2f6a786fb96fccaf245da1679bc1b87b4
+ENTRY f04.bin src/many/f04.bin 1464 4846dd2749b129a1bd696bc7b5bc942e2c6fe34a663f5fe7799f9cc45500809e
+ENTRY f05.bin src/many/f05.bin 1197 9e535c7112e1480a37055533c5e9ce6f1dfa13dc9cc4e05404ddf53f99890e68
+ENTRY f06.bin src/many/f06.bin 1134 99f9ee702bcd4a6f48da0919f4531ee462c0e587363e12bee3423e531b9bd839
+ENTRY f07.bin src/many/f07.bin 819 e21c7af07730776c8d777ab7d93decf4ec5c1b412fd8b3f28f0c0b9adf3a37e6
+ENTRY f08.bin src/many/f08.bin 1478 05434d06cb32edf4982236702bcb3762cb75e0d23bfd35fc88eda72f80fcfe64
+ENTRY f09.bin src/many/f09.bin 1950 30b945105c8d1735a508009ccdcf7b852a8c6161e60647b70a6821fe231f353c
+ENTRY f10.bin src/many/f10.bin 1476 2c478617e323856d8e7e419e8a9b5431cec34d3eba3bb462320889ee97b8a25a
+ENTRY f11.bin src/many/f11.bin 1211 518c6d5e8d455652498153ae239d59aeae1278e364fe101e40a3ad0c60ac146b
+ENTRY f12.bin src/many/f12.bin 1992 30f44774ea63f3f60ee022a4153de59a93b99a765a1d7f68ee3032797ccfa1ea
+ENTRY f13.bin src/many/f13.bin 1166 4df90166b7aa66df79d8880f6ad8f0d237e7ca7383941e6747b08ca53613ed33
+ENTRY f14.bin src/many/f14.bin 1318 250256ddc86e05c2b04bb3edcdc28a05188a18b2bfb74447d50df763bf82a68b
+ENTRY f15.bin src/many/f15.bin 1123 40349fef5dd3fa9137a2616e38db8d7343c21cb1a853d8fdb45620fea365bc10
+ENTRY f16.bin src/many/f16.bin 1455 95d9a8096b403b3d2ea1db8a045f502f68e5ae842ab1a0774994562dcf6b1db6
+ENTRY f17.bin src/many/f17.bin 272 731eef28603584a190205c6c078d1008b413a4994a1d9d7c9c0120c45e211ca3
+ENTRY f18.bin src/many/f18.bin 1006 c927c50088971bf0d49a3ea0e8eef60b8585808e6e109d6175f8b0b020576801
+ENTRY f19.bin src/many/f19.bin 1417 edce53fd87ea98393c68aa3a25b4e43ceeb0eb35be4930847e8a92eb00fd6b8a
+ENTRY f20.bin src/many/f20.bin 1408 21320753c0fd686e1ee3996f97d78d97f229dd4cd0babfc250d8c57c918c4005
+ENTRY f21.bin src/many/f21.bin 818 b7a62b6b5125470d41e4582079a3cf1da386b0103eb4cb0660621934ac5afcd9
+ENTRY f22.bin src/many/f22.bin 313 a1e81eac998d3041fde6f4e8554f47557cdc86c40b28c5dfa18cd203d190ea9b
+ENTRY f23.bin src/many/f23.bin 307 a17247162fd6360bc1edde437ba7e0be85a1e3053024289f84ce9ee28ae548a6
+ENTRY f24.bin src/many/f24.bin 443 ba639a70ad490a57d62173bb469342e68e802210e03590e6e933ab2149ee6dde
+ENTRY f25.bin src/many/f25.bin 1729 846c9e21addadbfc32d04b7004da8cadecea330a905907bc5d1219a09f160c2e
+ENTRY f26.bin src/many/f26.bin 1600 1ed733070f78d880898816dd4e4bef056d5065f2346a8fd576368e6a6748b23d
+ENTRY f27.bin src/many/f27.bin 172 e494e54bdbfc807d1f73105468f357cebeb20f51792dce221db05daf9b6a0373
+ENTRY f28.bin src/many/f28.bin 1518 ac9b2778ec978ca0df2063d9ad8438a9a921cb268a9639fc645349bfd2dec47c
+ENTRY f29.bin src/many/f29.bin 1115 15c1ed95de1da610ac5a62715d74d3938fb84bf7cbdf12dd2618b1c83f3165f8
+ENTRY f30.bin src/many/f30.bin 894 8121c08601d70a2e5a14efd8febbe6be56cc5a2de392d3bbc47801efcac226c4
+ENTRY f31.bin src/many/f31.bin 1703 19a9c745dd8c253cadcdbe6ae5494ee33275555b5bcadad517974157d9ba447b
+ENTRY f32.bin src/many/f32.bin 1240 364628b106ed92b271171eb8f8c06af28d157cda47ea1cd2f937732d6207d479
+ENTRY f33.bin src/many/f33.bin 1972 8d870b1cfb275a52f2dcef9f85aaf48ab63722f3903f6c5b975f2349a658c75a
+ENTRY f34.bin src/many/f34.bin 1359 c48afc4b70dee73694a9e0837fdf74298520b8c0bf6a6d5259797436d3058175
+ENTRY f35.bin src/many/f35.bin 1708 28b323844855b7d04223b46f2d812c5e7d6d5c88cc2ea162380a19d4324af1c2
+ENTRY f36.bin src/many/f36.bin 835 ef0b197155a541133f2d3979381d982d6125af0efbab0b0f5eec8b5222850bc6
+ENTRY f37.bin src/many/f37.bin 638 a91c2f8b7cff1bbfad2898cca9de8f80885827489243b0033348237f4f13cc06
+ENTRY f38.bin src/many/f38.bin 1956 5049b5bcddd500ae14cd8c93d8e60a6b4d452927fd456d0f5f0aace3e568dac1
+ENTRY f39.bin src/many/f39.bin 1016 3b0bbf0525def3836b236fe9fe2671842b407e2783f825eb0e9418341e91e514
+ENTRY f40.bin src/many/f40.bin 794 0221968d07a9433a1ee705a5965999964a20eff074231cdad5cfd57a1192b021
+ENTRY f41.bin src/many/f41.bin 1687 021051b2938dfbae2d4078e0d3769c59f55475f9baadcfdc65f4013492c1db26
+ENTRY f42.bin src/many/f42.bin 995 161678095eb687bbcf65406852b58f39b5f25ded248e4ede93f245c0097f3d53
+ENTRY f43.bin src/many/f43.bin 1098 2b4ad4685146f54f3fe4e0085b490051613fc651c1b6989ec6ab4d42195a624f
+ENTRY f44.bin src/many/f44.bin 827 5136a366c98396b45430c00e46a8b49256157266e868640f58226ca2fc55cc7e
+ENTRY f45.bin src/many/f45.bin 1864 6fec31169361587e7c6c75fb84e990afb5a6cd299ec16baca13a768af595b899
+ENTRY f46.bin src/many/f46.bin 614 2e6e314b3c5be8e0a2e13060aeca90b814766059d61e0b2033866ab573fa8ff6
+ENTRY f47.bin src/many/f47.bin 974 7e294eb9d1928ebc8a9ff195481b76b194bdf60a7549bb3a8992d88c1adf0a3c
+ENTRY f48.bin src/many/f48.bin 136 0d2258f0695c4503592b310338371306b2f1cb4f7e72845f4ada8396cf4d58bd
+ENTRY f49.bin src/many/f49.bin 1952 c240284141d31fda88e8ae6e1a94f57750b9234e4ea0981946c1caa52b744cde
+ENTRY f50.bin src/many/f50.bin 263 a6a4194052e9a788582e715bceadc4875cc334bd745a1102bbf9d85d35e992f6
+ENTRY f51.bin src/many/f51.bin 1520 5f02bcc4f7002cffb8dffc0d17523b46160300b0c607cdf9bde8482c54a6f9a2
+ENTRY f52.bin src/many/f52.bin 1945 ddfcd0dd4bb73a2432d0e9ef686dad5e5694bcf20e34dd358c83ea6beb06887b
+ENTRY f53.bin src/many/f53.bin 1874 64c0f7923c65dfb59b6b6e4ed8dfa3eef06c6b6d94b7275c2eb8e473e2936b5f
+ENTRY f54.bin src/many/f54.bin 711 32f6425bd0bf98c0e744b0373fa7ca06820a0d194334d93facd332f7c5e21414
+ENTRY f55.bin src/many/f55.bin 1342 2d5b68ca5701d994549fa754be43e34b07ef950353e50522fa22223b635d3744
+ENTRY f56.bin src/many/f56.bin 1501 1d274ec02d094332f9d4e82bb938393a3b51766ee2c24f3c9a440cec28c2b230
+ENTRY f57.bin src/many/f57.bin 224 6cf795923385446b5359f5f6f0e68edc9977bf6f841d8b5823376c9bc1167dd1
+ENTRY f58.bin src/many/f58.bin 1570 cc7a14f9d520ea1472ea3c283231a7d66d65f992097cb1192a904ccb017187ab
+ENTRY f59.bin src/many/f59.bin 331 b8c55b575f78775dc0868f43c5775f88891ce6161ee94e3b2917873a81ed4c00
+ENTRY f60.bin src/many/f60.bin 1617 a08fdb84d3a539e6f90f850ef4db82d688fdec366d819173cafb5abc70148e1e
+ENTRY f61.bin src/many/f61.bin 450 06f077636671a36d281e63b39db8e4f01e9d629c9d8ebfb14dcebc88dc0abb9b
+ENTRY f62.bin src/many/f62.bin 1489 eda18aeea72976fc12d8c4ed658ffb5eb5091a1daf7cf42d179d6aad0335671e
+ENTRY f63.bin src/many/f63.bin 1818 e4aae9ad9147aabfa69ea5b060d0bab929c4e5dd041b0bea81f4e2e51cefcb30
+ARCHIVE empty.7z ok # archivo sin entradas
+ARCHIVE malicious.7z fail # path traversal: ../, /abs, \, a/../../b
+ENTRY innocent.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ARCHIVE encrypted.7z fail # AES256 (v1: sin cifrado)
+ENTRY secreto.txt src/text.txt 100000 29ca98bf343ca12e2f4b7e76dd71156da914fd7baeeaf3a2b4069c1701850ede
+ARCHIVE big500.7z big # 500 MiB para test de memoria

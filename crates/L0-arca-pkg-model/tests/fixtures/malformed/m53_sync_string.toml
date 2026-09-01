@@ -1,0 +1,34 @@
+# MALFORMED (m53_sync_string.toml): sync string → TomlType
+# Fixture golden — manifest.toml COMPLETO v1 (docs/06 §3).
+# Paquete dual: native + wasm(AOT), todos los campos, todos los dialectos
+# (capacidades en forma punteada, ui como tabla inline de una línea).
+[package]
+id            = "dev.misapps.teclado"
+name          = "Mi Teclado Pro"
+version       = "1.2.0"
+min_host      = "1.0.0"
+api_level     = 1
+authors       = ["tú <tu@correo>"]
+description   = "Un teclado estadístico"
+tags          = ["tools"]
+
+[runtime]
+backend_pref  = "any"
+entry         = "app"
+respawn       = "on-crash"
+perms         = ["net.client", "clipboard.write"]
+ui            = { sync = "false", windows = "single", atlas = 2048, fonts = ["assets/fonts/inter.ttf"] }
+
+[artifacts.native]
+path     = "bin/native-aarch64/app"
+sha256   = "abababababababababababababababababababababababababababababababab"
+
+[artifacts.wasm]
+path     = "bin/wasm/app.wasm"
+aot      = "bin/wasm/app.aot"
+sha256   = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+wasm_runtime = "wamr-aot"
+
+[profile]
+launch_budget_ms = 120
+max_frame_mb     = 2

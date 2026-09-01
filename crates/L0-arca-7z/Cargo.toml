@@ -1,0 +1,30 @@
+[package]
+name = "arca-7z"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "sevenz-rust2 streaming + sandbox de paths"
+
+[dependencies]
+arca-types = { path = "../L0-arca-types" }
+sevenz-rust2 = { workspace = true }
+
+[features]
+# Codecs opt-in (passthrough a sevenz-rust2). El núcleo LZMA2/COPY/BZIP2/PPMD
+# + filtros BCJ/DELTA/AES256 ya viene con los defaults de sevenz-rust2.
+# v1 del contenedor: LZMA2 plano (docs/06 §6) → default sin extras.
+default = []
+deflate = ["sevenz-rust2/deflate"]
+brotli = ["sevenz-rust2/brotli"]
+lz4 = ["sevenz-rust2/lz4"]
+zstd = ["sevenz-rust2/zstd"]
+full = ["deflate", "brotli", "lz4", "zstd"]
+
+[dev-dependencies]
+tempfile = { workspace = true }
+# Auto-referencia para que los tests del corpus se construyan con TODOS los
+# codecs habilitados (los binarios de test unifican features con dev-deps;
+# el host/instalador sigue con el default mínimo).
+selftest = { path = ".", package = "arca-7z", features = ["full"] }

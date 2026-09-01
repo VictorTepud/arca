@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Arca Probe (F0)</string>
+    <string name="btn_launch">Ejecutar devapp-hello</string>
+    <string name="status_idle">Probe F0 · targetSdk 28 (grieta de Termux).\nPulsa el botón: extrae el binario a files/ y lo ejecuta (fork+exec).</string>
+    <string name="status_starting">Extrayendo binario del APK…</string>
+    <string name="status_exited">exit code = %1$d</string>
+</resources>

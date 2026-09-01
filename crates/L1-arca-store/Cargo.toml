@@ -1,0 +1,23 @@
+[package]
+name = "arca-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "registry SQLite + migraciones (apps/caps/instancias/audit)"
+
+[dependencies]
+arca-types = { path = "../L0-arca-types" }
+arca-pkg-model = { path = "../L0-arca-pkg-model" }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+# NOTA(agent): enmienda a spec 11 §2 (deps) — `tracing` es infraestructura
+# transversal obligatoria (ADR-014: todo crate loguea con target
+# `arca::<crate>::<módulo>`). Sin él, el detalle dinámico de los errores
+# sqlite se perdería: la política del ecosistema (spec 01 §5) exige contexto
+# ESTÁTICO en `ArcaError` y el detalle dinámico solo en el log.
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

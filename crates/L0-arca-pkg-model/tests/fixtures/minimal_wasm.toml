@@ -1,0 +1,20 @@
+# Fixture válido mínimo: solo artefacto wasm (sin aot ni wasm_runtime).
+[package]
+id = "dev.arca.minwasm"
+name = "Min Wasm"
+version = "0.2.0"
+min_host = "1.0.0"
+api_level = 1
+
+[runtime]
+backend_pref = "any"
+entry = "app"
+respawn = "never"
+
+[artifacts.wasm]
+path = "bin/wasm/app.wasm"
+sha256 = "0202020202020202020202020202020202020202020202020202020202020202"
+
+[profile]
+launch_budget_ms = 60
+max_frame_mb = 1

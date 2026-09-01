@@ -1,23 +1,55 @@
+# Arca — workspace virtual (docs/08-layout-workspace.md)
 [workspace]
 resolver = "2"
-members = [
-    "crates/arca-log",
-    "crates/arca-ipc",
-    "crates/arca-rt",
-    "crates/arca-exec-native",
-]
+members = ["crates/L0-*", "crates/L1-*", "crates/L2-*", "crates/L3-arca-*", "crates/L3-devapps/*"]
+exclude = ["host-android", "host-probe"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "MIT-0"
+license = "MIT OR Apache-2.0"
+publish = false
+rust-version = "1.85"
 
+# Versiones centralizadas. Regla (AGENTS.md §4): SIEMPRE `foo = { workspace = true }`.
+# Si falta una dep aquí, añádela PERO sin tocar versiones existentes.
 [workspace.dependencies]
-arca-log = { path = "crates/arca-log" }
-arca-ipc = { path = "crates/arca-ipc" }
-libc = "0.2"
+anyhow = "1.0"
+blake3 = "1.8"
+clap = { version = "4.6", features = ["derive"] }
+crc32fast = "1.4"
+hex = "0.4"
+memmap2 = "0.9"
+nix = { version = "0.30", features = [
+    "event",
+    "fs",
+    "mman",
+    "poll",
+    "process",
+    "signal",
+    "socket",
+    "term",
+    "uio",
+    "user",
+] }
+proptest = "1.11"
+rkyv = { version = "0.8", features = ["smol_str-0_3", "unaligned"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+seccompiler = "0.5"
+semver = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+sevenz-rust2 = "0.22"
+smol_str = "0.3"
+tempfile = "3.27"
+thiserror = "2.0"
+toml = "1.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# ⚠️ NOTA de perfil: NO pongas `panic = "abort"` en [profile.release] todavía.
-# Los tests e2e de F0-F1 verifican que una sub-app que entra en pánico muere con
-# exit code 101 (comportamiento por defecto de Rust con unwinding).
-# Cuando lleguemos a Android (F2+) lo reevaluamos para el APK final.
+[profile.dev]
+opt-level = 1 # blake3/7z/sqlite en tests son mucho más rápidos así
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+debug = "line-tables-only" # símbolos para perf en dispositivo

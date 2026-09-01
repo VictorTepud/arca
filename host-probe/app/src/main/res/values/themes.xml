@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Tema del framework (android:Theme.Material.*): NO requiere AndroidX
+      ni ninguna librería externa. El probe dibuja su UI por código.
+    -->
+    <style name="Theme.ArcaProbe" parent="android:Theme.Material.Light.DarkActionBar">
+        <item name="android:colorPrimary">#0F766E</item>
+        <item name="android:colorPrimaryDark">#0B5A55</item>
+        <item name="android:colorAccent">#14B8A6</item>
+    </style>
+</resources>

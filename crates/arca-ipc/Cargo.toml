@@ -1,8 +1,0 @@
-[package]
-name = "arca-ipc"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-description = "Arca L0: protocolo AIPC de F0 (tramas tag+len sobre socket)"
-
-[dependencies]

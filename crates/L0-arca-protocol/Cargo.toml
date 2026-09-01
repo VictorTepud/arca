@@ -1,0 +1,17 @@
+[package]
+name = "arca-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "mensajes AIPC v1 (rkyv)"
+
+[dependencies]
+arca-types = { path = "../L0-arca-types", features = ["rkyv"] }
+crc32fast = { workspace = true }
+rkyv = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true }
+proptest = { workspace = true }
