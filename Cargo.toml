@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/arca-log",
+    "crates/arca-ipc",
+    "crates/arca-rt",
+    "crates/arca-exec-native",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT-0"
+
+[workspace.dependencies]
+arca-log = { path = "crates/arca-log" }
+arca-ipc = { path = "crates/arca-ipc" }
+libc = "0.2"
+
+# ⚠️ NOTA de perfil: NO pongas `panic = "abort"` en [profile.release] todavía.
+# Los tests e2e de F0-F1 verifican que una sub-app que entra en pánico muere con
+# exit code 101 (comportamiento por defecto de Rust con unwinding).
+# Cuando lleguemos a Android (F2+) lo reevaluamos para el APK final.

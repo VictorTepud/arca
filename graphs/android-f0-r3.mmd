@@ -1,0 +1,15 @@
+%% android-f0-r3.mmd — flujo completo de la sonda F0 con arca.sh
+%% Regenéralo con: npx -y @mermaid-js/mermaid-cli -i android-f0-r3.mmd
+flowchart TD
+    A["./arca.sh todo"] --> B["deps (solo la 1.ª vez):<br/>Rust + JDK 17 + SDK Android + Gradle"]
+    B --> C["test en la PC:<br/>6 pruebas del motor r2"]
+    C --> D["cargo build --release:<br/>aarch64 + armv7 + x86_64<br/>(musl estático, rust-lld, sin NDK)"]
+    D --> E["binarios → assets del APK"]
+    E --> F["gradle assembleDebug<br/>targetSdk 28 (la clave)"]
+    F --> G["adb install"]
+    G --> H["app «Arca Probe F0»<br/>(Java puro, sin dependencias)"]
+    H --> I["extrae arca-ping de assets<br/>y chmod 700"]
+    I --> J["ProcessBuilder:<br/>fork + exec (¡F0!)"]
+    J --> K["AIPC por stdio:<br/>HELLO · PING/PONG · SHUTDOWN"]
+    K --> L["6 pruebas del motor<br/>EN el teléfono"]
+    L --> M["./arca.sh logs →<br/>logs/arca-logs-*.txt<br/>(el archivo que me envías)"]

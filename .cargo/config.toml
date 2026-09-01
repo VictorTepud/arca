@@ -1,0 +1,9 @@
+# Enlazado cruzado SIN NDK: rust-lld viene dentro de la toolchain de rustup
+# (mismo enlazador que produce binarios "static-pie", justo lo que Android
+# necesita ejecutar desde el directorio de datos de una app).
+# x86_64 musl usa el enlazador por defecto del sistema (gcc/cc en Deepin).
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"
+
+[target.armv7-unknown-linux-musleabihf]
+linker = "rust-lld"
