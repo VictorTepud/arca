@@ -28,11 +28,14 @@
 
         <!-- F3a: probe visual. Vertical fijo a propósito: el framebuffer se
              dimensiona UNA vez al arrancar y una rotación a mitad de sesión
-             invalidaría la geometría compartida con el hijo. -->
+             invalidaría la geometría compartida con el hijo.
+             exported="true" para que `./arca.sh run` (adb, uid 2000) pueda
+             lanzarla directamente; es una app de desarrollo sin datos
+             sensibles, el costo de exponerla es aceptable. -->
         <activity
             android:name=".DemoActivity"
             android:screenOrientation="portrait"
-            android:exported="false" />
+            android:exported="true" />
     </application>
 
 </manifest>
