@@ -11,3 +11,6 @@ description = "memfd, ring SPSC, seqlock (frames)"
 arca-types = { path = "../L0-arca-types" }
 memmap2 = { workspace = true }
 nix = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

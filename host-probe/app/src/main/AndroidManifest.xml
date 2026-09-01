@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  host-probe — manifest mínimo del gate GO/NO-GO (T02).
+  host-probe — manifest del gate GO/NO-GO (T02) + probe visual F3a.
 
   Sin permisos: el probe solo escribe en su propio filesDir y lanza un hijo
   con el mismo UID. LA GRIETA vive en targetSdk 28 (build.gradle.kts):
@@ -25,6 +25,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- F3a: probe visual. Vertical fijo a propósito: el framebuffer se
+             dimensiona UNA vez al arrancar y una rotación a mitad de sesión
+             invalidaría la geometría compartida con el hijo. -->
+        <activity
+            android:name=".DemoActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
     </application>
 
 </manifest>

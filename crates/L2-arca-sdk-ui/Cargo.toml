@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
-description = "egui bridge (pinta meshes, consume input)"
+description = "canvas software + widgets (F3a; el bridge egui llega con el pipeline real)"
 
 [dependencies]
+arca-gfx-protocol = { path = "../L0-arca-gfx-protocol" }
+thiserror = { workspace = true }

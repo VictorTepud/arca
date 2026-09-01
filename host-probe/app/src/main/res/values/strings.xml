@@ -5,4 +5,10 @@
     <string name="status_idle">Probe F0 · targetSdk 28 (grieta de Termux).\nPulsa el botón: extrae el binario a files/ y lo ejecuta (fork+exec).</string>
     <string name="status_starting">Extrayendo binario del APK…</string>
     <string name="status_exited">exit code = %1$d</string>
+    <string name="btn_demo">Demo UI (F3a: botones, imagen, video)</string>
+    <string name="demo_status_idle">Demo F3a · arrancando…</string>
+    <string name="demo_status_running">Demo corriendo · framebuffer %1$d×%2$d (toca la pantalla)</string>
+    <string name="demo_status_watchdog">Watchdog 180 s → SIGTERM</string>
+    <string name="demo_status_exited">demo exit code = %1$d · blits: %2$d</string>
+    <string name="demo_btn_stop">Detener demo (SIGTERM)</string>
 </resources>

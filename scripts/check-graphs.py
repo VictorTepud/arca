@@ -59,7 +59,8 @@ ALLOWED = {
     "arca-tools-pk": ["arca-types", "arca-pkg-model", "arca-7z", "arca-sign", "arca-log"],
     "arca-tools-dev": ["arca-types", "arca-pkg-model", "arca-store", "arca-installer", "arca-sign", "arca-7z", "arca-log"],
     "arca-bench": ["arca-types", "arca-ipc", "arca-shm", "arca-gfx-host", "arca-exec-abi", "arca-protocol"],
-    "devapp-hello": [], "devapp-demo": [], "devapp-keyboard": [],
+    "devapp-hello": [], "devapp-demo": ["arca-gfx-protocol", "arca-shm", "arca-sdk-ui"],
+    "devapp-keyboard": [],
     "devapp-crashy": [], "devapp-net": [], "arca-home": [],
 }
 

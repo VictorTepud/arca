@@ -1,5 +1,6 @@
 package dev.arca.probe
 
+import android.content.Intent
 import android.app.Activity
 import android.graphics.Typeface
 import android.os.Bundle
@@ -38,6 +39,7 @@ class MainActivity : Activity() {
     private lateinit var statusView: TextView
     private lateinit var logView: TextView
     private lateinit var launchButton: Button
+    private lateinit var demoButton: Button
 
     /** Buffer en pantalla; protegido con [logLock] (lector + hilo UI). */
     private val logLock = Any()
@@ -63,6 +65,13 @@ class MainActivity : Activity() {
             text = getString(R.string.btn_launch)
             setOnClickListener { onLaunchClicked() }
         }
+        // F3a: abre la Activity del probe visual (botones/imagen/animación).
+        demoButton = Button(this).apply {
+            text = getString(R.string.btn_demo)
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, DemoActivity::class.java))
+            }
+        }
         logView = TextView(this).apply {
             typeface = Typeface.MONOSPACE
             textSize = 12f
@@ -74,6 +83,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             addView(statusView)
             addView(launchButton)
+            addView(demoButton)
             addView(
                 scroller,
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)

@@ -13,3 +13,4 @@ keys/
 /host-probe/build
 /host-probe/app/build
 /host-probe/app/src/main/assets/devapp-hello
+/host-probe/app/src/main/assets/devapp-demo

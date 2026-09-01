@@ -19,3 +19,13 @@ rkyv = { workspace = true, optional = true }
 serde = { workspace = true }
 smol_str = { workspace = true, features = ["serde"] }
 thiserror = { workspace = true }
+
+# NOTA(agent F3a): en targets musl (los probes estáticos-PIE para Android se
+# cross-compilan con rust-lld SIN NDK ni gcc cruzado) blake3 debe compilar
+# en modo `pure`: solo Rust portable, sin C. El C de blake3 exige un
+# compilador cruzado que el flujo de arca.sh no instala (y no va a instalar:
+# esa es la gracia del cross con rust-lld). Costo: blake3 portable es más
+# lento, pero NINGÚN binario de probe hashea en su camino caliente; en host
+# glibc (tests, tools, signing) sigue el camino rápido con intrínsecos.
+[target.'cfg(target_env = "musl")'.dependencies]
+blake3 = { workspace = true, features = ["pure"] }

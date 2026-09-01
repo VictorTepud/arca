@@ -1,0 +1,29 @@
+%% gfx-f3a.mmd — flujo de datos del probe visual F3a (pantalla viva)
+%% Regenerar el MASTER completo: python3 scripts/check-graphs.py
+flowchart TD
+    subgraph HOST["APK Kotlin · dev.arca.probe · DemoActivity"]
+        A[SurfaceView<br/>pantalla del teléfono] -->|onTouchEvent| B[escala pantalla→fb<br/>y escribe stdin JSON]
+        C["RandomAccessFile.setLength(region)<br/>FileChannel.map MAP_SHARED"] --> D[(filesDir/arca-fb.bin<br/>2 slots seqlock)]
+        E[SurfaceHolder.lockCanvas<br/>drawBitmap escala] --> A
+        F["lector stdout<br/>{frame, stats, pong}"] -->|seqlock read_latest| G[Bitmap.setPixels<br/>RGBA→ARGB]
+        G --> E
+    end
+
+    subgraph HIJO["devapp-demo · ELF static-pie musl (sin NDK)"]
+        H[stdin poll<br/>arca-sdk-ui input] -->|touch/ping/shutdown| I[Demo state<br/>física + botones]
+        I --> J[Canvas software<br/>arca-sdk-ui]
+        J -->|paint_frame<br/>AFRM + bitmap| K[FrameSlots.begin_write<br/>publish seqlock]
+        K -->|stdout {"event":"frame"}| F
+    end
+
+    B --> H
+    D -.->|mmap RW mismo archivo<br/>mismo UID mismo sandbox| K
+    D -.->|mmap RW| F
+
+    subgraph L0["contratos L0 (estables)"]
+        L[arca-gfx-protocol<br/>FrameHeader 32 B]
+        M[arca-shm<br/>seqlock double-buffer]
+    end
+
+    L -.define el payload.-> J
+    M -.define la región.-> D

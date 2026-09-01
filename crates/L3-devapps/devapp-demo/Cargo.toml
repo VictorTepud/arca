@@ -5,6 +5,16 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
-description = "app demo E2E (lista virtual, sliders, telemetría)"
+description = "app demo interactiva F3a: botones, imagen, animación y touch (probe visual)"
 
+[[bin]]
+name = "devapp-demo"
+path = "src/main.rs"
+
+# NOTA(agent F3a): `libc` local con versión explícita, misma convención que
+# devapp-hello (el Cargo.toml raíz es intocable; 0.2.189 = cache local).
 [dependencies]
+arca-gfx-protocol = { path = "../../L0-arca-gfx-protocol" }
+arca-shm = { path = "../../L0-arca-shm" }
+arca-sdk-ui = { path = "../../L2-arca-sdk-ui" }
+libc = "0.2.189"

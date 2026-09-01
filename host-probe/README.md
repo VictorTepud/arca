@@ -1,10 +1,21 @@
-# host-probe — APK del gate GO/NO-GO (F0, tarea T02)
+# host-probe — APK del gate GO/NO-GO (F0, tarea T02) + demo visual (F3a)
 
 APK Kotlin **mínimo** que valida en un teléfono real la grieta de targetSdk 28
 (la ruta de Termux, blueprint `docs/01-restricciones-android.md` §2):
 extrae un binario Rust de sus assets a `filesDir` (chmod 700) y lo ejecuta
 con `fork`+`exec`. Su stdout (JSON de `devapp-hello`) se ve en logcat y en
 pantalla. El resultado se registra en `decision.md`.
+
+**F3a**: la misma app ahora también abre `DemoActivity` — el "display
+server" de juguete del probe visual: crea un framebuffer compartido
+(`filesDir/arca-fb.bin`, double-buffer seqlock de `arca-shm`), lanza
+`devapp-demo`, blitea sus frames al `SurfaceView` y le inyecta los toques
+por stdin. Flujo completo en `graphs/gfx-f3a.mmd` (raíz del repo).
+
+> Con `./arca.sh` (raíz del repo) no hace falta NDK ni Gradle manual:
+> `./arca.sh todo` compila ambos binarios (static-pie con rust-lld),
+> los mete en assets, arma el APK, lo instala y lanza el demo. Las
+> secciones 2–3 de abajo son el camino MANUAL equivalente (histórico).
 
 Estructura:
 
@@ -16,10 +27,12 @@ host-probe/                 (excluido del workspace Cargo — no es Rust)
 └── app/
     ├── build.gradle.kts    compileSdk 34 · minSdk 26 · targetSdk 28 (LA GRIETA)
     └── src/main/
-        ├── AndroidManifest.xml
+        ├── AndroidManifest.xml          (+ .DemoActivity, vertical fija)
         ├── res/values/{strings,themes}.xml   (Theme.Material del framework)
-        ├── assets/README.md                 (coloca aquí el binario)
-        └── java/dev/arca/probe/MainActivity.kt
+        ├── assets/README.md             (coloca aquí los binarios)
+        └── java/dev/arca/probe/
+            ├── MainActivity.kt          (probe F0 + botón hacia el demo)
+            └── DemoActivity.kt          (display server F3a)
 ```
 
 Sin dependencias externas (sin AndroidX): UI programática, un botón, un

@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  arca.sh — Arca F0-F2 (r4): TODO en un solo comando
+#  arca.sh — Arca F0-F3a (r5): TODO en un solo comando
 #
-#  Basado en el proyecto completo (26 crates) con el fix de las e2e flaky.
-#  Compila, prueba, arma el APK del probe, lo instala en el teléfono,
-#  lo corre y guarda los logs para enviar.
+#  Basado en el proyecto completo (26 crates) con el fix de las e2e flaky (r4)
+#  + el probe visual F3a (r5): devapp-demo pinta botones/imagen/animación
+#  en pantalla y responde al dedo (framebuffer compartido + stdio).
 #
 #  Uso:
-#    ./arca.sh todo      # deps + test + build + install + run + logs
-#    ./arca.sh deps      # Rust + targets musl + JDK + SDK + Gradle (1.ª vez)
-#    ./arca.sh test      # 6 pruebas e2e del motor nativo EN TU PC
-#    ./arca.sh build     # devapp-hello (arm64 estático, SIN NDK) + APK
-#    ./arca.sh install   # instala el APK (adb)
-#    ./arca.sh run       # lanza "Arca Probe F0" en el teléfono
-#    ./arca.sh logs      # guarda logs/arca-logs-*.txt (el archivo a enviar)
-#    ./arca.sh limpiar   # borra compilados (conserva dependencias)
+#    ./arca.sh todo            # deps + test + build + install + run demo + logs
+#    ./arca.sh deps            # Rust + targets musl + JDK + SDK + Gradle (1.ª vez)
+#    ./arca.sh test            # 6 e2e del motor + selftest del demo EN TU PC
+#    ./arca.sh build           # devapp-hello + devapp-demo (arm64, SIN NDK) + APK
+#    ./arca.sh install         # instala el APK (adb)
+#    ./arca.sh run [hello|demo]  # lanza el probe F0 o el demo F3a (default: demo)
+#    ./arca.sh logs            # guarda logs/arca-logs-*.txt (el archivo a enviar)
+#    ./arca.sh limpiar         # borra compilados (conserva dependencias)
 #
 #  Opción global: ./arca.sh --skip-deps todo
 # ============================================================================
@@ -26,10 +26,12 @@ SDK="$TOOLS/android-sdk"
 GRADLE_HOME="$TOOLS/gradle-8.9"
 LOGS_DIR="$REPO_ROOT/logs"
 HOST_PROBE_DIR="$REPO_ROOT/host-probe"
-ASSET="$HOST_PROBE_DIR/app/src/main/assets/devapp-hello"
+ASSET_HELLO="$HOST_PROBE_DIR/app/src/main/assets/devapp-hello"
+ASSET_DEMO="$HOST_PROBE_DIR/app/src/main/assets/devapp-demo"
 APK="$HOST_PROBE_DIR/app/build/outputs/apk/debug/app-debug.apk"
 PAQUETE="dev.arca.probe"
 BIN_ARM64="$REPO_ROOT/target/aarch64-unknown-linux-musl/release/devapp-hello"
+BIN_DEMO_ARM64="$REPO_ROOT/target/aarch64-unknown-linux-musl/release/devapp-demo"
 
 C_R='\033[0;31m'; C_G='\033[0;32m'; C_Y='\033[0;33m'; C_B='\033[0;34m'; C_0='\033[0m'
 info()  { printf "${C_B}[arca ]${C_0} %s\n" "$*"; }
@@ -209,6 +211,13 @@ cmd_test() {
     else
         error "fallaron tests del motor; cópiame la salida de arriba"
     fi
+    info "selftest del demo (render→publish→lectura, sin teléfono)..."
+    cargo build -p devapp-demo
+    if "$REPO_ROOT/target/debug/devapp-demo" --selftest; then
+        ok "probe visual F3a verificado en tu PC"
+    else
+        error "falló el selftest del demo; cópiame la salida"
+    fi
 }
 
 cmd_build() {
@@ -219,20 +228,25 @@ cmd_build() {
     [ -d "$SDK/platform-tools" ] || error "no hay Android SDK; corre: ./arca.sh deps"
 
     cd "$REPO_ROOT"
-    info "compilando devapp-hello para arm64 (estático-PIE, SIN NDK)..."
+    info "compilando devapp-hello y devapp-demo para arm64 (estático-PIE, SIN NDK)..."
     cargo build -p devapp-hello --target aarch64-unknown-linux-musl --release \
         || error "falló el cross a aarch64 musl"
+    cargo build -p devapp-demo --target aarch64-unknown-linux-musl --release \
+        || error "falló el cross del demo a aarch64 musl"
 
     # gate de calidad del README de devapp-hello: ELF DYN sin DT_NEEDED
-    local tipo nd
-    tipo="$(readelf -h "$BIN_ARM64" | awk '/Type:/{print $2}')"
-    nd="$(readelf -d "$BIN_ARM64" 2>/dev/null | grep -c NEEDED || true)"
-    [ "$tipo" = "DYN" ] || error "devapp-hello no es PIE (Type=$tipo) — Android lo rechazaría"
-    [ "$nd" = "0" ] || error "devapp-hello tiene dependencias dinámicas ($nd) — debe ser estático"
-    ok "devapp-hello: ELF estático-PIE verificado"
+    for bin in "$BIN_ARM64" "$BIN_DEMO_ARM64"; do
+        local tipo nd
+        tipo="$(readelf -h "$bin" | awk '/Type:/{print $2}')"
+        nd="$(readelf -d "$bin" 2>/dev/null | grep -c NEEDED || true)"
+        [ "$tipo" = "DYN" ] || error "$(basename "$bin") no es PIE (Type=$tipo) — Android lo rechazaría"
+        [ "$nd" = "0" ] || error "$(basename "$bin") tiene dependencias dinámicas ($nd) — debe ser estático"
+    done
+    ok "devapp-hello y devapp-demo: ELF estático-PIE verificados"
 
-    info "copiando el binario a los assets del APK..."
-    cp "$BIN_ARM64" "$ASSET"
+    info "copiando los binarios a los assets del APK..."
+    cp "$BIN_ARM64" "$ASSET_HELLO"
+    cp "$BIN_DEMO_ARM64" "$ASSET_DEMO"
 
     info "construyendo el APK (la primera vez descarga dependencias de Gradle)..."
     export ANDROID_HOME="$SDK"
@@ -258,9 +272,16 @@ cmd_install() {
 
 cmd_run() {
     adb_requerido
-    "$ADB" shell am start -n "$PAQUETE/.MainActivity" >/dev/null \
-        || error "no pude lanzar la app"
-    ok "sonda lanzada: mira el teléfono y pulsa el botón de ejecutar"
+    local modo="${1:-demo}"
+    if [ "$modo" = "demo" ]; then
+        "$ADB" shell am start -n "$PAQUETE/.DemoActivity" >/dev/null \
+            || error "no pude lanzar el demo (¿corriste ./arca.sh build?)"
+        ok "demo F3a lanzado: toca la pantalla del teléfono (botones y pelota)"
+    else
+        "$ADB" shell am start -n "$PAQUETE/.MainActivity" >/dev/null \
+            || error "no pude lanzar la app"
+        ok "sonda F0 lanzada: mira el teléfono y pulsa el botón de ejecutar"
+    fi
 }
 
 cmd_logs() {
@@ -270,7 +291,7 @@ cmd_logs() {
     stamp="$(date +%Y%m%d-%H%M%S)"
     out="$LOGS_DIR/arca-logs-$stamp.txt"
     {
-        echo "=== Arca · registro del probe F0 (r4) ==="
+        echo "=== Arca · registro del probe F0 + demo F3a (r5) ==="
         echo "generado: $(date)"
         echo
         echo "-- teléfono --"
@@ -300,10 +321,10 @@ cmd_todo() {
     cmd_test
     cmd_build
     cmd_install
-    cmd_run
-    info "esperando 35 s a que corras el probe en el teléfono (botón)..."
+    cmd_run demo
+    info "esperando 45 s a que juegues con el demo en el teléfono..."
     local i
-    for i in $(seq 35 -1 1); do
+    for i in $(seq 45 -1 1); do
         printf "\r   quedan %2d s " "$i"
         sleep 1
     done
@@ -322,16 +343,16 @@ cmd_limpiar() {
 
 uso() {
     cat <<'EOF'
-arca.sh — Arca F0-F2 (r4): construye, instala y mide el probe en tu Android
+arca.sh — Arca F0-F3a (r5): construye, instala y corre el probe en tu Android
 
-  ./arca.sh todo      flujo completo: deps + test + build + install + run + logs
-  ./arca.sh deps      instalar dependencias (Rust, JDK, Android SDK, Gradle)
-  ./arca.sh test      6 pruebas e2e del motor nativo en tu PC
-  ./arca.sh build     compilar devapp-hello (arm64, sin NDK) + APK
-  ./arca.sh install   instalar el APK en el teléfono (adb)
-  ./arca.sh run       lanzar "Arca Probe F0" en el teléfono
-  ./arca.sh logs      guardar los logs en logs/arca-logs-*.txt (para enviar)
-  ./arca.sh limpiar   borrar compilados
+  ./arca.sh todo             flujo completo: deps + test + build + install + run demo + logs
+  ./arca.sh deps             instalar dependencias (Rust, JDK, Android SDK, Gradle)
+  ./arca.sh test             6 e2e del motor + selftest del demo en tu PC
+  ./arca.sh build            compilar devapp-hello + devapp-demo (arm64, sin NDK) + APK
+  ./arca.sh install          instalar el APK en el teléfono (adb)
+  ./arca.sh run [hello|demo] lanzar el probe F0 (hello) o el demo F3a (demo, default)
+  ./arca.sh logs             guardar los logs en logs/arca-logs-*.txt (para enviar)
+  ./arca.sh limpiar          borrar compilados
 
   opción global: --skip-deps   (ej: ./arca.sh --skip-deps todo)
 EOF
@@ -344,7 +365,7 @@ case "$CMD" in
     test)          cmd_test ;;
     build)         cmd_build ;;
     install)       cmd_install ;;
-    run)           cmd_run ;;
+    run)           cmd_run "${2:-demo}" ;;
     logs)          cmd_logs ;;
     todo|all)      cmd_todo ;;
     limpiar|clean) cmd_limpiar ;;

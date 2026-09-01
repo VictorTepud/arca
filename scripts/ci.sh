@@ -12,5 +12,8 @@ fi
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+# selftest del demo F3a: render→publish→seqlock→lectura sin teléfono
+cargo build -p devapp-demo
+./target/debug/devapp-demo --selftest
 python3 scripts/check-graphs.py
 echo "CI OK"

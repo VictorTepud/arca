@@ -11,6 +11,8 @@
 //!   Release/Acquire, sin futex → tolerante al freezer de Android).
 //! - [`FrameSlots`]: double-buffer C→H de frames con seqlock
 //!   (seq par = escribiendo/inválido, seq impar = válido).
+//! - [`FrameFile`]: región de frames sobre un ARCHIVO compartido por
+//!   path (modo probe F3a: host Kotlin + hijo comparten filesDir).
 //!
 //! Invariante global de diseño (docs/07): **prohibido futex/mutex en shm**.
 //! Si un lado está congelado (cgroup freezer), el otro nunca se bloquea:
@@ -18,6 +20,7 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(test), deny(clippy::unwrap_used))]
 
+pub mod file;
 pub mod frame;
 pub mod map;
 pub mod memfd;
@@ -26,6 +29,7 @@ pub mod ring;
 #[cfg(test)]
 mod tests;
 
+pub use file::FrameFile;
 pub use frame::{region_len, FrameSlots, FrameSnap, WriteSlot};
 pub use map::ShmMap;
 pub use memfd::Memfd;
