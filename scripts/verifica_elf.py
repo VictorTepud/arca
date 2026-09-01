@@ -14,6 +14,12 @@
 #   3. sin PT_INTERP                   → no necesita linker dinámico
 #   4. 0 entradas DT_NEEDED            → sin bibliotecas dinámicas
 #
+# LÍMITE CONOCIDO (T20): este gate NO detecta un "PIE sin
+# auto-reubicación" (crt1 en vez de rcrt1): un ELF así pasa los 4
+# chequeos y aun así revienta al ejecutarse. Lo garantiza el wrapper
+# tools/ld.lld (crt1.o → rcrt1.o + -pie); la verificación de ejecución
+# real se hace bajo qemu-aarch64 (ver worklog/T20).
+#
 # Uso: python3 scripts/verifica_elf.py BIN [BIN...]
 # Sale 0 si TODOS pasan; 1 si alguno falla (motivo impreso en pantalla).
 

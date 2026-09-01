@@ -228,6 +228,17 @@ cmd_build() {
     [ -d "$SDK/platform-tools" ] || error "no hay Android SDK; corre: ./arca.sh deps"
 
     cd "$REPO_ROOT"
+
+    # wrapper ld.lld (static-PIE REAL para el cross musl; tools/ld.lld):
+    # se instala solo y se refresca si el repo trae una versión más nueva.
+    if ! [ -x "$HOME/.cargo/bin/ld.lld" ] \
+        || ! cmp -s "$REPO_ROOT/tools/ld.lld" "$HOME/.cargo/bin/ld.lld"; then
+        info "instalando wrapper de linker ld.lld (static-PIE real)..."
+        mkdir -p "$HOME/.cargo/bin"
+        cp "$REPO_ROOT/tools/ld.lld" "$HOME/.cargo/bin/ld.lld"
+        chmod +x "$HOME/.cargo/bin/ld.lld"
+    fi
+
     info "compilando devapp-hello y devapp-demo para arm64 (estático-PIE, SIN NDK)..."
     cargo build -p devapp-hello --target aarch64-unknown-linux-musl --release \
         || error "falló el cross a aarch64 musl"

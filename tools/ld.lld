@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+# ld.lld (wrapper Arca) — static-PIE REAL para cross musl (aarch64/armv7)
+# SIN NDK y sin dependencias nuevas. Se instala como ~/.cargo/bin/ld.lld.
+#
+# PROBLEMA QUE RESUELVE: el target aarch64-unknown-linux-musl de rustc no
+# activa PIE (pasa -no-pie al linker y usa crt1.o). Con `-pie` a secas,
+# lld emite un ET_DYN SIN reubicaciones ni auto-reubicación: Android lo
+# carga en una base distinta a la de enlazado y revienta al instante
+# (SIGSEGV si_addr=NULL, exit 139 — reproducido bajo qemu-aarch64 y en
+# hardware real). El target x86_64-unknown-linux-musl SÍ es static-pie
+# por defecto (usa rcrt1.o + R_X86_64_RELATIVE); este wrapper replica
+# ese comportamiento para los targets que no lo tienen.
+#
+# QUÉ HACE: cuando la línea de link es un cross musl con crt1.o
+# self-contained (rustup), sustituye crt1.o → rcrt1.o (arranque
+# static-PIE con auto-reubicación, incluido en la toolchain), quita
+# -no-pie y añade -pie. Para CUALQUIER OTRA invocación: passthrough
+# puro (comportamiento idéntico al lld real).
+#
+# Por qué el archivo se llama ld.lld: rustc elige el estilo de argumentos
+# según el nombre del linker ("ld.lld" → argumentos estilo ld, sin
+# prefijos -Wl,); y lld despacha por argv[0]. El wrapper se ejecuta con
+# argv[0]="ld.lld" hacia el rust-lld real de la toolchain.
+#
+# Requiere: python3 y `rustc` en PATH (para localizar la toolchain).
+
+import os
+import subprocess
+import sys
+
+
+def lld_real():
+    """Ruta del rust-lld de la toolchain (cualquier host: lld es
+    agnóstico del target). Sale con error si no se encuentra."""
+    try:
+        sysroot = subprocess.run(
+            ["rustc", "--print", "sysroot"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except Exception as e:  # noqa: BLE001 — fallar con mensaje claro
+        sys.exit(f"ld.lld (arca): no hallé el sysroot de rustc ({e})")
+    rustlib = os.path.join(sysroot, "lib", "rustlib")
+    if os.path.isdir(rustlib):
+        for host in sorted(os.listdir(rustlib)):
+            cand = os.path.join(rustlib, host, "bin", "rust-lld")
+            if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                return cand
+    sys.exit("ld.lld (arca): no encontré rust-lld en la toolchain")
+
+
+def main():
+    args = sys.argv[1:]
+
+    # ¿link cross musl de rustup? (crt1.o del self-contained en la línea)
+    es_crt1 = lambda a: (
+        os.sep + "self-contained" + os.sep in a
+        and os.path.basename(a) == "crt1.o"
+    )
+    idx_crt1 = next((i for i, a in enumerate(args) if es_crt1(a)), None)
+
+    lld = lld_real()
+
+    if idx_crt1 is None:
+        # passthrough puro: link normal, intocable
+        os.execv(lld, ["ld.lld"] + args)
+        return
+
+    # cross musl: localizar rcrt1.o junto al crt1.o del MISMO target
+    rcrt1 = os.path.join(os.path.dirname(args[idx_crt1]), "rcrt1.o")
+    if not os.path.isfile(rcrt1):
+        sys.exit(
+            f"ld.lld (arca): falta rcrt1.o junto a {args[idx_crt1]} "
+            "(¿toolchain incompleta? rustup target add <target>)"
+        )
+
+    # reescribir: crt1.o → rcrt1.o, fuera -no-pie, dentro -pie
+    nuevos = ["-pie"]
+    for i, a in enumerate(args):
+        if i == idx_crt1:
+            nuevos.append(rcrt1)
+        elif a in ("-no-pie", "--no-pie"):
+            continue
+        else:
+            nuevos.append(a)
+
+    os.execv(lld, ["ld.lld"] + nuevos)
+
+
+if __name__ == "__main__":
+    main()

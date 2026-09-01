@@ -1,26 +1,36 @@
-# Cross-compilación SIN NDK (decisión de arquitecto, worklog T17):
-# rust-lld viene dentro de la toolchain de rustup y produce exactamente lo
-# que Android necesita ejecutar desde filesDir: ELF estático-PIE
-# (Type=DYN + sin DT_NEEDED — gate de readelf del README de devapp-hello).
+# Cross-compilación SIN NDK (r8): static-PIE REAL vía wrapper ld.lld.
 #
-# Con esto, arca.sh puede armar el APK del probe F0 sin instalar el NDK:
-#   cargo build -p devapp-hello --target aarch64-unknown-linux-musl --release
+# HISTORIA (worklog/T20): hasta r7 se pasaban "-C link-arg=-pie" a
+# rust-lld. Eso produce un ELF ET_DYN que PASA los gates de readelf
+# (DYN, 0 DT_NEEDED) pero SIN auto-reubicación: Android lo carga en una
+# base aleatoria, las 419 R_AARCH64_RELATIVE nunca se aplican y el
+# binario revienta al instante (SIGSEGV si_addr=NULL, exit 139;
+# reproducido bajo qemu-aarch64 y en hardware). El target
+# aarch64-unknown-linux-musl de rustc no activa PIE (pasa -no-pie y
+# usa crt1.o); x86_64-unknown-linux-musl sí (por eso el e2e del motor
+# en PC nunca vio esto).
 #
-# (x86_64 musl — el que usa el e2e en PC — ya es static-pie por defecto y
-# enlaza con el cc del sistema, por eso no aparece aquí.)
+# SOLUCIÓN: linker = "ld.lld" es un WRAPPER (~/.cargo/bin/ld.lld, fuente
+# en tools/ld.lld; ./arca.sh build lo instala solo) que en los links
+# cross-musl sustituye crt1.o → rcrt1.o (arranque static-PIE con
+# auto-reubicación, incluido en la toolchain de rustup) y -no-pie →
+# -pie. Cualquier otro link pasa intacto. Resultado: ET_DYN +
+# DT_FLAGS_1 PIE + R_AARCH64_RELATIVE procesadas por rcrt1 — igual que
+# el static-pie de x86_64 musl, y corre (verificado bajo qemu).
+#
+# (x86_64 musl — el del e2e en PC — sigue con su cc del sistema: ya es
+# static-pie por defecto. armv7 musl tiene rcrt1.o propio: mismo wrapper.)
 
 [target.aarch64-unknown-linux-musl]
-linker = "rust-lld"
+linker = "ld.lld"
 rustflags = [
     "-C", "target-feature=+crt-static",
     "-C", "relocation-model=pic",
-    "-C", "link-arg=-pie",
 ]
 
 [target.armv7-unknown-linux-musleabihf]
-linker = "rust-lld"
+linker = "ld.lld"
 rustflags = [
     "-C", "target-feature=+crt-static",
     "-C", "relocation-model=pic",
-    "-C", "link-arg=-pie",
 ]
