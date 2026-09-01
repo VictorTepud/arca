@@ -234,15 +234,19 @@ cmd_build() {
     cargo build -p devapp-demo --target aarch64-unknown-linux-musl --release \
         || error "falló el cross del demo a aarch64 musl"
 
-    # gate de calidad del README de devapp-hello: ELF DYN sin DT_NEEDED
+    # gate de calidad: ELF estático-PIE verificado A NIVEL DE BYTES con
+    # python3 (scripts/verifica_elf.py). El parseo textual de readelf+awk
+    # fallaba en algunas Deepin aunque el binario estuviera bien (Type=
+    # vacío) y abortaba el build; leer el ELF directo elimina toda
+    # dependencia de versión/locale/binutils del entorno.
+    command -v python3 >/dev/null 2>&1 \
+        || error "el gate necesita python3: sudo apt install python3"
     for bin in "$BIN_ARM64" "$BIN_DEMO_ARM64"; do
-        local tipo nd
-        tipo="$(readelf -h "$bin" | awk '/Type:/{print $2}')"
-        nd="$(readelf -d "$bin" 2>/dev/null | grep -c NEEDED || true)"
-        [ "$tipo" = "DYN" ] || error "$(basename "$bin") no es PIE (Type=$tipo) — Android lo rechazaría"
-        [ "$nd" = "0" ] || error "$(basename "$bin") tiene dependencias dinámicas ($nd) — debe ser estático"
+        [ -f "$bin" ] || error "no existe $bin (¿falló la compilación?)"
+        python3 "$REPO_ROOT/scripts/verifica_elf.py" "$bin" \
+            || error "$(basename "$bin") no pasó el gate estático-PIE (detalle arriba)"
     done
-    ok "devapp-hello y devapp-demo: ELF estático-PIE verificados"
+    ok "devapp-hello y devapp-demo: ELF estático-PIE verificados (bytes)"
 
     info "copiando los binarios a los assets del APK..."
     cp "$BIN_ARM64" "$ASSET_HELLO"
