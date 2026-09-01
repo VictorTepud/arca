@@ -1,8 +1,9 @@
-/target
-/logs
-/.arca-tools
-/host-probe/.gradle
-/host-probe/build
-/host-probe/app/build
-/host-probe/local.properties
-/host-probe/app/src/main/assets/arca-bin
+target
+logs
+.arca-tools
+host-probe/.gradle
+host-probe/build
+host-probe/app/build
+host-probe/local.properties
+host-probe/app/src/main/assets/arca-bin/*
+!host-probe/app/src/main/assets/arca-bin/.gitkeep
