@@ -5,17 +5,19 @@
   Sin permisos: el probe solo escribe en su propio filesDir y lanza un hijo
   con el mismo UID. LA GRIETA vive en targetSdk 28 (build.gradle.kts):
   dominio SELinux untrusted_app_27 → exec de ELF en /data/data permitido
-  (blueprint docs/01-restricciones-android.md §2).
+  (blueprint docs/01-restricciones-android.md §2). r10: esa misma grieta es
+  la que permite "abrir binario desde el almacenamiento" (copia a
+  filesDir/exec + chmod + fork+exec).
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application
         android:allowBackup="false"
         android:label="@string/app_name"
-        android:theme="@style/Theme.ArcaProbe">
+        android:theme="@style/Theme.ArcaHome">
 
-        <!-- configChanges: la Activity no se recrea al rotar (el estado del
-             probe en pantalla sobrevive; el proceso hijo no se relanza). -->
+        <!-- Home/lanzador (r10): demo incorporada + abrir binarios del
+             almacenamiento (SAF) + lista de instaladas. -->
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
@@ -26,15 +28,20 @@
             </intent-filter>
         </activity>
 
-        <!-- F3a: probe visual. Vertical fijo a propósito: el framebuffer se
-             dimensiona UNA vez al arrancar y una rotación a mitad de sesión
-             invalidaría la geometría compartida con el hijo.
+        <!-- F3a: visor del probe visual. Vertical fijo a propósito: el
+             framebuffer se dimensiona UNA vez al arrancar y una rotación a
+             mitad de sesión invalidaría la geometría compartida con el hijo.
+             r10: fullscreen inmersivo, sin UI del host; el binario puede
+             venir del extra "bin" (abierta desde el almacenamiento) o ser
+             el asset devapp-demo por defecto.
              exported="true" para que `./arca.sh run` (adb, uid 2000) pueda
              lanzarla directamente; es una app de desarrollo sin datos
              sensibles, el costo de exponerla es aceptable. -->
         <activity
             android:name=".DemoActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="portrait"
+            android:theme="@style/Theme.ArcaView"
             android:exported="true" />
     </application>
 

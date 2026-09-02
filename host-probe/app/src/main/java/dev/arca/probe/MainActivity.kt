@@ -1,215 +1,251 @@
 package dev.arca.probe
 
-import android.content.Intent
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.Intent
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.util.Log
+import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import java.io.BufferedReader
+import android.widget.Toast
 import java.io.File
 import java.io.IOException
-import java.io.InputStreamReader
-import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 /**
- * Probe F0 de Arca — gate GO/NO-GO del proyecto (tarea T02).
+ * Home de Arca (r10) — el "lanzador" de sub-apps nativas.
  *
- * Flujo al pulsar el botón:
- *  1. Copia el asset `devapp-hello` (ELF aarch64 estático-PIE compilado con
- *     cargo-ndk) a `filesDir/devapp-hello` y le aplica chmod 700.
- *  2. Lo lanza como proceso hijo (fork+exec vía [ProcessBuilder]) — LA
- *     prueba del gate: si el dominio SELinux del APK lo permite, el hijo vive.
- *  3. Un hilo lee su stdout línea a línea y lo manda a Logcat (tag
- *     `ArcaProbe`) y a pantalla (últimas líneas).
- *  4. Watchdog de 30 s: `destroy()` manda SIGTERM (ejerce el handler del
- *     binario: debe responder `{"event":"sigterm",...}` y salir 0 en ≤100 ms);
- *     si no muere, `destroyForcibly()`.
+ * La vieja pantalla del probe F0 (botón hello + log) cumplió su ciclo: el
+ * gate fue GO hace revisiones y el log vivía en logcat. El home ahora es
+ * mínimo y útil:
  *
- * Interpretación del resultado → rellenar `host-probe/decision.md`:
- * heartbeats visibles = exec OK = GO para el backend nativo; error
- * "Permission denied" en el launch = NO-GO (pivot WASM, docs/12 F5).
+ *  1. **Ejecutar demo incorporada** — lanza [DemoActivity] con el
+ *     `devapp-demo` empaquetado en el APK (asset).
+ *  2. **Abrir binario desde el almacenamiento…** — picker SAF
+ *     (ACTION_OPEN_DOCUMENT): copia el archivo elegido a
+ *     `filesDir/exec/` con chmod 7→ (la MISMA grieta de targetSdk 28
+ *     que ya usa el demo: dominio SELinux untrusted_app_27 permite
+ *     execve en /data/data) y lo lanza en el visor.
+ *
+ *     Sirve para CUALQUIER binario compilado para el contrato de sub-app:
+ *     ELF aarch64 estático (musl), frames JSON por stdout, touch JSON por
+ *     stdin, env ARCA_FB/ARCA_FB_W/ARCA_FB_H — o sea, cualquier devapp de
+ *     este repo (`./arca.sh build` produce exactamente eso).
+ *  3. **Lista de instaladas** — lo ya copiado en filesDir/exec: un toque
+ *     lo ejecuta, un toque largo lo borra. Se refresca en cada onResume.
+ *
+ * Sin permisos: SAF solo lee el URI que el usuario eligió.
  */
 class MainActivity : Activity() {
 
-    private lateinit var statusView: TextView
-    private lateinit var logView: TextView
-    private lateinit var launchButton: Button
-    private lateinit var demoButton: Button
-
-    /** Buffer en pantalla; protegido con [logLock] (lector + hilo UI). */
-    private val logLock = Any()
-    private val logLines = ArrayDeque<String>()
+    private lateinit var listContainer: LinearLayout
 
     private companion object {
         private const val TAG = "ArcaProbe"
-        private const val ASSET_NAME = "devapp-hello"
-        private const val MAX_LOG_LINES = 60
-        private const val WATCHDOG_S = 30L
-        private const val GRACE_AFTER_SIGTERM_S = 3L
+        private const val REQ_ABRIR = 42
+        private const val DIR_EXEC = "exec"
+        private const val MAX_NOMBRE = 64
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val pad = dp(16)
-        statusView = TextView(this).apply {
-            text = getString(R.string.status_idle)
+        val title = TextView(this).apply {
+            text = getString(R.string.home_title)
+            textSize = 28f
+            setTextColor(0xFFE8EAF0.toInt())
             setPadding(pad, pad, pad, 0)
         }
-        launchButton = Button(this).apply {
-            text = getString(R.string.btn_launch)
-            setOnClickListener { onLaunchClicked() }
+        val sub = TextView(this).apply {
+            text = getString(R.string.home_sub)
+            textSize = 12f
+            setTextColor(0xFF9AA3B5.toInt())
+            setPadding(pad, dp(4), pad, pad)
         }
-        // F3a: abre la Activity del probe visual (botones/imagen/animación).
-        demoButton = Button(this).apply {
-            text = getString(R.string.btn_demo)
+        val btnDemo = Button(this).apply {
+            text = getString(R.string.btn_run_demo)
             setOnClickListener {
                 startActivity(Intent(this@MainActivity, DemoActivity::class.java))
             }
         }
-        logView = TextView(this).apply {
-            typeface = Typeface.MONOSPACE
-            textSize = 12f
-            setTextIsSelectable(true)
-            setPadding(pad, pad / 2, pad, pad)
+        val btnAbrir = Button(this).apply {
+            text = getString(R.string.btn_open)
+            setOnClickListener { abrirDesdeAlmacenamiento() }
         }
-        val scroller = ScrollView(this).apply { addView(logView) }
+        val header = TextView(this).apply {
+            text = getString(R.string.installed_header)
+            textSize = 12f
+            typeface = Typeface.MONOSPACE
+            setTextColor(0xFF9AA3B5.toInt())
+            setPadding(pad, pad, pad, dp(4))
+        }
+        listContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, 0, pad, pad)
+        }
+
+        val scroller = ScrollView(this).apply { addView(listContainer) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(statusView)
-            addView(launchButton)
-            addView(demoButton)
+            setBackgroundColor(0xFF101318.toInt())
+            addView(title)
+            addView(sub)
+            addView(btnDemo)
+            addView(btnAbrir)
+            addView(header)
             addView(
                 scroller,
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
+                )
             )
         }
         setContentView(root)
     }
 
-    /** Lanza el probe fuera del hilo de UI (nunca bloquear el main thread). */
-    private fun onLaunchClicked() {
-        launchButton.isEnabled = false
-        synchronized(logLock) { logLines.clear() }
-        renderLog()
-        postStatus(getString(R.string.status_starting))
-        thread(name = "arca-probe") { runProbe() }
+    override fun onResume() {
+        super.onResume()
+        refrescarLista()
     }
 
-    /** Ejecuta el flujo completo del probe (en hilo propio). */
-    private fun runProbe() {
+    // ───────────────── abrir binario desde el almacenamiento ─────────────────
+
+    /** Picker SAF: cualquier archivo (los devapp son ELF sin extensión). */
+    private fun abrirDesdeAlmacenamiento() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+        }
+        @Suppress("DEPRECATION") // sin AndroidX: vía clásica
+        startActivityForResult(intent, REQ_ABRIR)
+    }
+
+    @Deprecated("Deprecated in Java")
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_ABRIR) return
+        val uri = data?.data ?: return
+        if (resultCode != RESULT_OK) return
+
+        // Copiar fuera del hilo de UI (el archivo puede ser de MBs).
+        thread(name = "arca-instala") { instalarDesdeUri(uri) }
+    }
+
+    /** Copia el URI elegido a filesDir/exec/<nombre> + chmod y lo lanza. */
+    private fun instalarDesdeUri(uri: Uri) {
         try {
-            val bin = installBinary()
-            postStatus("Ejecutando: ${bin.absolutePath}")
-
-            // fork+exec del binario extraído — EL experimento del gate.
-            val process = ProcessBuilder(bin.absolutePath)
-                .redirectErrorStream(true) // stderr también al logcat del probe
-                .start()
-
-            // Lector de stdout: línea a línea → Logcat + pantalla.
-            thread(name = "arca-probe-stdout") { pumpStdout(process) }
-
-            // Watchdog de seguridad: 30 s y SIGTERM (destroy()).
-            val finished = process.waitFor(WATCHDOG_S, TimeUnit.SECONDS)
-            if (!finished) {
-                postStatus("Watchdog ${WATCHDOG_S}s → destroy() [SIGTERM]")
-                Log.i(TAG, "watchdog: destroy() → SIGTERM al hijo")
-                process.destroy()
-                if (!process.waitFor(GRACE_AFTER_SIGTERM_S, TimeUnit.SECONDS)) {
-                    postStatus("SIGTERM ignorado → destroyForcibly()")
-                    process.destroyForcibly()
-                    process.waitFor()
-                }
+            val nombre = sanitizar(nombreDe(uri))
+            val dir = File(filesDir, DIR_EXEC)
+            if (!dir.exists() && !dir.mkdirs()) {
+                throw IOException("no pude crear ${dir.path}")
             }
-
-            val code = process.exitValue()
-            Log.i(TAG, "exit code = $code")
-            postStatus(getString(R.string.status_exited, code))
-        } catch (t: Throwable) {
-            // El caso NO-GO típico llega aquí: IOException con
-            // "error=13, Permission denied" (EACCES de execve bajo W^X).
-            Log.e(TAG, "probe FAILED", t)
-            postStatus("FAIL: ${t.message}")
-        } finally {
-            runOnUiThread { launchButton.isEnabled = true }
-        }
-    }
-
-    /** Lee stdout del hijo hasta EOF; cada línea → Logcat + UI. */
-    private fun pumpStdout(process: Process) {
-        try {
-            BufferedReader(InputStreamReader(process.inputStream, Charsets.UTF_8)).use { reader ->
-                while (true) {
-                    val line = reader.readLine() ?: break
-                    Log.i(TAG, line)
-                    appendLog(line)
-                }
-            }
-        } catch (e: IOException) {
-            // Normal cuando el proceso muere con el pipe a medias; el wait()
-            // del padre reporta el exit code real.
-            Log.w(TAG, "stdout reader: ${e.message}")
-        }
-    }
-
-    /**
-     * Extrae el binario del APK (assets/) a filesDir/ con chmod 700.
-     *
-     * La extracción a `/data/data/<pkg>/files` + el exec posterior ES la
-     * grieta de targetSdk 28 que este probe valida (blueprint docs/01 §2).
-     */
-    private fun installBinary(): File {
-        val bin = File(filesDir, ASSET_NAME)
-        if (bin.exists() && !bin.delete()) {
-            throw IOException("no pude borrar ${bin.path} (¿hay un probe vivo?)")
-        }
-        try {
-            assets.open(ASSET_NAME).use { input ->
+            val bin = File(dir, nombre)
+            contentResolver.openInputStream(uri)?.use { input ->
                 bin.outputStream().use { output -> input.copyTo(output, 64 * 1024) }
+            } ?: throw IOException("contentResolver no pudo abrir $uri")
+
+            // rwx: sin el bit +x, execve() falla con EACCES aunque SELinux
+            // lo permita (misma razón que el installBinary del probe F0).
+            val ok = bin.setReadable(true, false) &&
+                bin.setWritable(true, false) &&
+                bin.setExecutable(true, false)
+            if (!ok) throw IOException("chmod falló sobre ${bin.path}")
+
+            Log.i(TAG, "instalada: ${bin.path} (${bin.length()} B)")
+            toast(getString(R.string.toast_installed, nombre))
+            lanzar(bin)
+        } catch (t: Throwable) {
+            Log.e(TAG, "instalar FALLÓ", t)
+            toast(getString(R.string.toast_copy_fail, t.message ?: "?"))
+        }
+    }
+
+    /** Nombre visible del documento (SAF); fallback razonable si no hay. */
+    private fun nombreDe(uri: Uri): String {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && cursor.moveToFirst()) {
+                    cursor.getString(idx)?.let { return it }
+                }
             }
-        } catch (e: IOException) {
-            throw IOException(
-                "asset '$ASSET_NAME' no encontrado o ilegible — coloca el binario " +
-                    "compilado con cargo-ndk en app/src/main/assets/ (ver su README.md)",
-                e
-            )
-        }
-        // rwx------: sin el bit +x, execve() falla con EACCES aunque SELinux
-        // lo permita. (En Termux esto es el clásico "chmod +x".)
-        val permsOk = bin.setReadable(true, false) &&
-            bin.setWritable(true, false) &&
-            bin.setExecutable(true, false)
-        if (!permsOk) {
-            throw IOException("chmod 700 falló sobre ${bin.path}")
-        }
-        Log.i(TAG, "instalado: ${bin.path} (${bin.length()} B)")
-        return bin
+        return "app-${System.currentTimeMillis()}"
     }
 
-    /** Añade una línea al buffer en pantalla (cap 60) y refresca el TextView. */
-    private fun appendLog(line: String) {
-        val snapshot = synchronized(logLock) {
-            logLines.addLast(line)
-            while (logLines.size > MAX_LOG_LINES) logLines.removeFirst()
-            logLines.joinToString("\n")
+    /** Deja solo [A-Za-z0-9._-] y acorta: será un nombre de archivo. */
+    private fun sanitizar(nombre: String): String {
+        val limpio = nombre.replace(Regex("[^A-Za-z0-9._-]"), "_")
+            .trimStart('.')
+            .ifEmpty { "app" }
+        return limpio.take(MAX_NOMBRE)
+    }
+
+    private fun lanzar(bin: File) {
+        val intent = Intent(this, DemoActivity::class.java).apply {
+            putExtra("bin", bin.absolutePath)
         }
-        runOnUiThread { logView.text = snapshot }
+        runOnUiThread { startActivity(intent) }
     }
 
-    private fun renderLog() {
-        val snapshot = synchronized(logLock) { logLines.joinToString("\n") }
-        logView.text = snapshot
+    // ───────────────── lista de instaladas ─────────────────
+
+    private fun refrescarLista() {
+        listContainer.removeAllViews()
+        val dir = File(filesDir, DIR_EXEC)
+        val bins = dir.listFiles { f: File -> f.isFile }
+            ?.sortedBy { it.name.lowercase() }
+            ?: emptyList()
+
+        if (bins.isEmpty()) {
+            listContainer.addView(TextView(this).apply {
+                text = getString(R.string.installed_empty)
+                textSize = 12f
+                typeface = Typeface.MONOSPACE
+                setTextColor(0xFF6B7385.toInt())
+            })
+            return
+        }
+
+        for (bin in bins) {
+            val row = Button(this).apply {
+                text = getString(R.string.installed_row, bin.name, kb(bin.length()))
+                isAllCaps = false
+                gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                setOnClickListener { lanzar(bin) }
+                setOnLongClickListener { confirmarBorrado(bin); true }
+            }
+            listContainer.addView(row)
+        }
     }
 
-    private fun postStatus(msg: String) {
+    private fun confirmarBorrado(bin: File) {
+        AlertDialog.Builder(this)
+            .setMessage(getString(R.string.confirm_delete, bin.name))
+            .setPositiveButton(android.R.string.yes) { _, _ ->
+                val ok = bin.delete()
+                toast(getString(if (ok) R.string.toast_deleted else R.string.toast_delete_fail, bin.name))
+                refrescarLista()
+            }
+            .setNegativeButton(android.R.string.no, null)
+            .show()
+    }
+
+    private fun kb(bytes: Long): String =
+        if (bytes >= 1024 * 1024) "%.1f MB".format(bytes / 1024.0 / 1024.0)
+        else "%d KB".format(bytes / 1024)
+
+    private fun toast(msg: String) {
         runOnUiThread {
-            statusView.text = msg
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
             Log.i(TAG, msg)
         }
     }

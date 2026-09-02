@@ -8,21 +8,20 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.os.Bundle
 import android.util.Log
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.WindowManager
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.widget.FrameLayout
+import android.widget.Toast
 import java.io.BufferedReader
 import java.io.File
 import java.io.IOException
 import java.io.InputStreamReader
 import java.io.OutputStream
 import java.io.RandomAccessFile
-import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
 import java.util.concurrent.TimeUnit
@@ -32,19 +31,29 @@ import kotlin.concurrent.thread
 /**
  * Probe visual F3a — el "display server" de juguete del proyecto.
  *
+ * r10: VISOR A PANTALLA COMPLETA. Sin barra de estado propia, sin botón
+ * "Detener", sin TextView de detalles: el SurfaceView es TODO lo que se
+ * ve. El cierre vive DENTRO de la sub-app (botón X en su esquina
+ * superior derecha): cuando el hijo sale, esta actividad se cierra
+ * (finish) y vuelve al home (MainActivity).
+ *
+ * Además puede lanzar CUALQUIER binario devapp (no solo el demo del APK):
+ * MainActivity lo copia a filesDir/exec con chmod y lo pasa en el extra
+ * [EXTRA_BIN]. El contrato es el mismo: env ARCA_FB/ARCA_FB_W/H, frames
+ * JSON en stdout, touch JSON en stdin.
+ *
  * Flujo (idéntico al diagrama graphs/gfx-f3a.mmd):
  *  1. Calcula el tamaño del framebuffer (pantalla escalada, lado mayor
- *     ≤ 720 px) y crea `filesDir/arca-fb.bin` con la geometría EXACTA del
- *     double-buffer seqlock de arca-shm: 2 slots × (16 B de seq + frame).
- *  2. Mapea el archivo RW (FileChannel.map: MAP_SHARED — coherente con
- *     el mmap del hijo) y lo deja abierto toda la sesión.
- *  3. Extrae `devapp-demo` del APK (chmod 700) y lo lanza con
- *     ARCA_FB/ARCA_FB_W/ARCA_FB_H (fork+exec: mismo UID, mismo sandbox).
- *  4. Hilo lector de stdout: `{"event":"frame"}` → lee el frame más nuevo
- *     con el protocolo seqlock (seq impar = válido; copiar y revalidar)
- *     y lo blitea al SurfaceView. `{"event":"stats"}` → línea de estado.
- *  5. Touch → stdin del hijo como JSON (el hijo escala nada: nosotros
- *     convertimos de pantalla a píxeles del framebuffer).
+ *     ≤ 1440 px — r10: era 720 y el pixelado "retro" molestaba; 2.25×
+ *     píxeles + bilinear del blit) y crea `filesDir/arca-fb.bin` con la
+ *     geometría EXACTA del double-buffer seqlock de arca-shm.
+ *  2. Mapea el archivo RW (MAP_SHARED — coherente con el mmap del hijo).
+ *  3. Resuelve el binario (extra o asset del APK, chmod 700) y lo lanza
+ *     con fork+exec: mismo UID, mismo sandbox.
+ *  4. Hilo lector de stdout: `{"event":"frame"}` → lee el frame más novo
+ *     con el protocolo seqlock y lo blitea al SurfaceView (bilinear).
+ *  5. Touch → stdin del hijo como JSON (pantalla→píxeles del fb).
+ *  6. El hijo muere (X, watchdog o señal) → log + finish() → home.
  *
  * Layout del payload de cada slot (espejo de arca-gfx-protocol):
  *  0..4 "AFRM" · 4 version(=1) · 5 formato(1=RGBA) · 7 flags ·
@@ -53,9 +62,10 @@ import kotlin.concurrent.thread
  */
 class DemoActivity : Activity() {
 
-    private lateinit var statusView: TextView
     private lateinit var surfaceView: SurfaceView
-    private var stopButton: Button? = null
+
+    // Binario a lanzar: null = el demo incorporado (asset del APK).
+    private var binPath: String? = null
 
     // Estado del proceso hijo (solo toca el hilo "arca-demo").
     private var process: Process? = null
@@ -84,31 +94,35 @@ class DemoActivity : Activity() {
     private companion object {
         private const val TAG = "ArcaProbe"
         private const val ASSET = "devapp-demo"
+        private const val EXTRA_BIN = "bin"
         private const val FB_NAME = "arca-fb.bin"
         private const val SLOT_HDR = 16        // arca-shm: seq u64 + pad 8
         private const val SLOTS = 2            // double-buffer
         private const val HDR = 32             // arca-gfx-protocol
-        // r9: con 180 s el watchdog cortaba la demo a los ~5401 frames
-        // (30 fps × 180 s + 1 en vuelo) con un exit 0 tan limpio que parecía
-        // crash "normal". 15 min: margen de sobra para enseñar la demo y
-        // sigue acotando un hijo colgado (el botón Detener sigue ahí).
+        // r9: watchdog 900 s (antes 180 cortaba la demo a los ~5401
+        // frames con un exit 0 tan limpio que parecía crash).
         private const val WATCHDOG_S = 900L
         private const val GRACE_S = 3L
-        private const val MAX_LADO = 720       // presupuesto de blit
+        // r10: 720 → 1440. En un 1080×2340 el fb pasa de 336×720 a
+        // ~664×1440 (4× píxeles): el bilinear del drawBitmap ya no
+        // amplía 3.2× sino ~1.6× y el pixelado retro desaparece. La
+        // sub-app escala su UI ×ui (≈h/720) para no quedar diminuta.
+        // El costo (render CPU + bucle RGBA→ARGB de Kotlin) sigue de
+        // sobra dentro del presupuesto de 33 ms/frame en el teléfono.
+        private const val MAX_LADO = 1440      // presupuesto de blit
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // r9: sin esto el timeout de pantalla apaga el SurfaceView a mitad
-        // de la demo (blits congelados) y EMUI puede matar el proceso al
-        // pasar a segundo plano. Es un probe: mantener la pantalla viva
-        // mientras la actividad esté delante es el comportamiento correcto.
+        // de la demo y EMUI puede matar el proceso en segundo plano.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // r10: visor a pantalla completa (el tema ya es NoActionBar.Fullscreen;
+        // esto esconde también status+nav de forma inmersiva sticky).
+        applyImmersive()
 
-        statusView = TextView(this).apply {
-            text = getString(R.string.demo_status_idle)
-            setPadding(dp(16), dp(12), dp(16), dp(8))
-        }
+        binPath = intent.getStringExtra(EXTRA_BIN)
+
         surfaceView = SurfaceView(this).apply {
             holder.addCallback(object : SurfaceHolder.Callback {
                 override fun surfaceCreated(h: SurfaceHolder) {
@@ -124,28 +138,34 @@ class DemoActivity : Activity() {
                 }
             })
         }
-        stopButton = Button(this).apply {
-            text = getString(R.string.demo_btn_stop)
-            setOnClickListener { stopChild("botón detener") }
-        }
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(statusView)
+        val root = FrameLayout(this).apply {
             addView(
                 surfaceView,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
-                )
-            )
-            addView(
-                stopButton,
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    Gravity.CENTER
                 )
             )
         }
         setContentView(root)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applyImmersive()
+    }
+
+    /** Inmersivo sticky: sin status bar ni nav bar encima del demo. */
+    private fun applyImmersive() {
+        @Suppress("DEPRECATION") // minSdk 26 sin AndroidX: la vía clásica
+        window.decorView.systemUiVisibility =
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
     }
 
     override fun onResume() {
@@ -162,29 +182,36 @@ class DemoActivity : Activity() {
         super.onDestroy()
     }
 
-    // ───────────────────── ciclo del demo ─────────────────────
+    // ───────────────────── ciclo del visor ─────────────────────
 
     private fun runDemo() {
         try {
             setupFramebuffer()
-            val bin = installBinary()
-            postStatus(getString(R.string.demo_status_running, fbW, fbH))
+            val bin = resolveBinary()
+            Log.i(TAG, "lanzando: ${bin.absolutePath} (fb ${fbW}x${fbH})")
 
             val pb = ProcessBuilder(bin.absolutePath)
             pb.redirectErrorStream(true)
             pb.environment()["ARCA_FB"] = fbPath().absolutePath
             pb.environment()["ARCA_FB_W"] = fbW.toString()
             pb.environment()["ARCA_FB_H"] = fbH.toString()
-            val p = pb.start()
+            val p = try {
+                pb.start()
+            } catch (e: IOException) {
+                // binario externo roto: ENOEXEC/ENOENT/EACCES — típico si
+                // el archivo elegido no era un devapp aarch64.
+                toast(getString(R.string.toast_exec_fail, e.message))
+                throw e
+            }
             process = p
             childStdin = p.outputStream
 
             thread(name = "arca-demo-stdout") { pumpStdout(p) }
 
-            // Watchdog de seguridad (como el probe F0, pero 180 s).
+            // Watchdog de seguridad (15 min: margen para enseñar la demo;
+            // sigue acotando un hijo colgado).
             val finished = p.waitFor(WATCHDOG_S, TimeUnit.SECONDS)
             if (!finished) {
-                postStatus(getString(R.string.demo_status_watchdog))
                 Log.i(TAG, "demo watchdog: destroy() → SIGTERM")
                 p.destroy()
                 if (!p.waitFor(GRACE_S, TimeUnit.SECONDS)) {
@@ -194,13 +221,37 @@ class DemoActivity : Activity() {
             }
             val code = p.exitValue()
             Log.i(TAG, "demo exit code = $code (blits: $framesBlit/${framesSeen} frames)")
-            postStatus(getString(R.string.demo_status_exited, code, framesBlit))
         } catch (t: Throwable) {
             Log.e(TAG, "demo FAILED", t)
-            postStatus("FAIL: ${t.message}")
         } finally {
             running = false
+            // r10: el hijo terminó (X de la sub-app, shutdown del host o
+            // watchdog) → cerrar el visor y volver al home. Si la activity
+            // ya se está cerrando (onDestroy), no hacemos nada.
+            runOnUiThread { if (!isFinishing) finish() }
         }
+    }
+
+    /**
+     * Binario a ejecutar: el del extra (abierto desde el almacenamiento y
+     * copiado por MainActivity a filesDir/exec) o, por defecto, el demo
+     * incorporado del APK.
+     */
+    private fun resolveBinary(): File {
+        val extra = binPath
+        if (!extra.isNullOrBlank()) {
+            val f = File(extra)
+            if (f.isFile && f.canRead()) {
+                // defensivo: refresca el bit +x (la grieta targetSdk 28
+                // permite exec en /data/data, pero el bit de modo importa)
+                f.setExecutable(true, false)
+                Log.i(TAG, "binario externo: ${f.path} (${f.length()} B)")
+                return f
+            }
+            toast(getString(R.string.toast_no_binary, extra))
+            Log.e(TAG, "binario externo inaccesible: $extra")
+        }
+        return installBinary()
     }
 
     /** Dimensiona y crea el archivo de región + su mapeo (rol HOST). */
@@ -287,25 +338,22 @@ class DemoActivity : Activity() {
                 framesSeen++
                 // pacing: 1 de cada 61 frames al logcat (evita spam). 61 es
                 // COPRIMO con los 2 slots del double-buffer → el slot
-                // logueado ALTERNa 0/1/0/1 y el logcat DEMUESTRA la rotación
-                // (con 60, par, siempre caía el mismo slot y “parecía” que
-                // el hijo no rotaba — aliasing de muestreo, no bug).
+                // logueado ALTERNa 0/1/0/1 y el logcat DEMUESTRA la rotación.
                 if (framesSeen % 61 == 1L) {
                     Log.i(TAG, "frame seq=${json.optLong("seq")} slot=${json.optInt("slot")}")
                 }
                 if (surfaceReady) blit()
             }
-            "stats" -> {
-                val msg = "stats: frames=${json.optLong("frames")} fps=${json.optLong("fps")}"
-                Log.i(TAG, msg)
-                postStatus(msg + " · blits: $framesBlit")
-            }
+            "stats" -> Log.i(
+                TAG,
+                "stats: frames=${json.optLong("frames")} fps=${json.optLong("fps")} · blits: $framesBlit"
+            )
             "hello" -> Log.i(TAG, "hijo listo: $line")
             "pong" -> Log.i(TAG, "pong seq=${json.optLong("seq")}")
             "exiting", "sigterm" -> Log.i(TAG, line)
             "fatal" -> {
                 Log.e(TAG, "hijo FATAL: $line")
-                postStatus("FAIL hijo: ${json.optString("error")}")
+                toast(getString(R.string.toast_child_fail, json.optString("error")))
             }
             else -> Log.i(TAG, line)
         }
@@ -314,7 +362,7 @@ class DemoActivity : Activity() {
     // ───────────────────── lectura seqlock + blit ─────────────────────
 
     /**
-     * Lee el frame válido más nuevo (protocolo seqlock espejo de
+     * Lee el frame válido más novo (protocolo seqlock espejo de
      * FrameSlots::read_latest_into) y lo pinta en el SurfaceView.
      */
     private fun blit() {
@@ -450,12 +498,10 @@ class DemoActivity : Activity() {
         }
     }
 
-    private fun postStatus(msg: String) {
+    private fun toast(msg: String) {
         runOnUiThread {
-            statusView.text = msg
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
             Log.i(TAG, msg)
         }
     }
-
-    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 }

@@ -12,8 +12,15 @@
 //!
 //! Qué enseña en pantalla: título, logo embebido (blit con alfa),
 //! panel de "video" procedural (animación = placeholder del video real,
-//! que requiere códec: F4+), 3 botones táctiles, pelota que persigue el
-//! dedo y telemetría (fps/frames/pings).
+//! que requiere códec: F4+), 2 botones táctiles (Color/Ping), pelota que
+//! persigue el dedo, telemetría (fps/frames/pings) y una X de cierre en la
+//! esquina superior derecha (r10: la sub-app se apaga desde adentro — el
+//! host ya no tiene botón "Detener").
+//!
+//! r10: escala de UI. El fb del teléfono pasó de ~336×720 a ~666×1440
+//! (MAX_LADO del host 720→1440): todo el layout está expresado en un
+//! "diseño 720p" y se multiplica por [`ui_scale`] (≈h/720) para que en
+//! resoluciones altas no quede una hormiga de UI.
 //!
 //! # Protocolo stdout (líneas JSON, dialecto F0 extendido)
 //!
@@ -88,7 +95,9 @@ struct Demo {
     /// Respuestas pong emitidas.
     pings: u32,
     /// Botones presionados (visual).
-    pressed: [bool; 3],
+    pressed: [bool; 2],
+    /// Escala de la UI (diseño base 720p; ver [`ui_scale`]).
+    ui: u32,
     /// Señal de salida limpia (motivo).
     exit: Option<&'static str>,
     /// Fase animada del panel de "video" (ms acumulados del panel).
@@ -110,7 +119,8 @@ impl Demo {
             hue: 210,
             hue_on: false,
             pings: 0,
-            pressed: [false, false, false],
+            pressed: [false, false],
+            ui: ui_scale(h),
             exit: None,
             vid_t: 0,
             last_fps: (1000 / FRAME_MS) as u32,
@@ -123,89 +133,55 @@ impl Demo {
         }
     }
 
-    /// Botones (stack: sin alloc). Orden: [Color, Ping, Salir].
-    fn botones(&self) -> [Button; 3] {
+    /// Botones (stack: sin alloc). Orden: [Color, Ping]. (r10: el cierre
+    /// vive en la X de la esquina; sin "Salir" duplicando funciones.)
+    fn botones(&self) -> [Button; 2] {
         let w = self.w as i32;
-        let h = self.h as i32;
-        // fila de 3 si cabe; columna si la pantalla es angosta
-        let ancho = if w >= 330 {
-            (w - 16 - 16) / 3 - 8
+        let ui = self.ui as i32;
+        // fila de 2 si cabe; columna si la pantalla es angosta
+        let dos = w >= 330 * ui;
+        let ancho = if dos {
+            (w - 32 * ui) / 2 - 8 * ui
         } else {
-            w - 32
+            w - 32 * ui
         };
-        let alto = 44;
+        let alto = 44 * ui;
         let base = Color::rgb(38, 122, 222);
         let verde = Color::rgb(22, 152, 118);
-        let rojo = Color::rgb(196, 62, 62);
-        let fila_y = h - 132;
-        if w >= 330 {
+        let fila_y = self.h as i32 - 132 * ui;
+        let mk = |x: i32, y: i32, label: &'static str, col: Color| Button {
+            x,
+            y,
+            w: ancho,
+            h: alto,
+            label,
+            base: col,
+            ink: Color::rgb(255, 255, 255),
+        };
+        if dos {
             [
-                Button {
-                    x: 16,
-                    y: fila_y,
-                    w: ancho,
-                    h: alto,
-                    label: "Color",
-                    base,
-                    ink: Color::rgb(255, 255, 255),
-                },
-                Button {
-                    x: 16 + ancho + 8,
-                    y: fila_y,
-                    w: ancho,
-                    h: alto,
-                    label: "Ping",
-                    base: verde,
-                    ink: Color::rgb(255, 255, 255),
-                },
-                Button {
-                    x: 16 + 2 * (ancho + 8),
-                    y: fila_y,
-                    w: ancho,
-                    h: alto,
-                    label: "Salir",
-                    base: rojo,
-                    ink: Color::rgb(255, 255, 255),
-                },
+                mk(16 * ui, fila_y, "Color", base),
+                mk(16 * ui + ancho + 8 * ui, fila_y, "Ping", verde),
             ]
         } else {
             [
-                Button {
-                    x: 16,
-                    y: fila_y,
-                    w: ancho,
-                    h: alto,
-                    label: "Color",
-                    base,
-                    ink: Color::rgb(255, 255, 255),
-                },
-                Button {
-                    x: 16,
-                    y: fila_y - alto - 8,
-                    w: ancho,
-                    h: alto,
-                    label: "Ping",
-                    base: verde,
-                    ink: Color::rgb(255, 255, 255),
-                },
-                Button {
-                    x: 16,
-                    y: fila_y - 2 * (alto + 8),
-                    w: ancho,
-                    h: alto,
-                    label: "Salir",
-                    base: rojo,
-                    ink: Color::rgb(255, 255, 255),
-                },
+                mk(16 * ui, fila_y, "Color", base),
+                mk(16 * ui, fila_y - alto - 8 * ui, "Ping", verde),
             ]
         }
     }
 
     /// Zona libre de la pelota (debajo del panel de video, encima de botones).
     fn zona_pelota(&self) -> (f32, f32, f32, f32) {
-        let top = (self.h as i32).saturating_sub(320).max(180) as f32;
-        let bottom = (self.h as i32 - 140).max((top as i32) + 24) as f32;
-        (12.0, top, (self.w - 12) as f32, bottom)
+        let ui = self.ui as i32;
+        let top = (self.h as i32).saturating_sub(320 * ui).max(180 * ui) as f32;
+        let bottom = (self.h as i32 - 140 * ui).max(top as i32 + 24) as f32;
+        (
+            12.0 * ui as f32,
+            top,
+            (self.w as i32 - 12 * ui) as f32,
+            bottom,
+        )
     }
 
     /// Aplica un evento del host.
@@ -223,6 +199,12 @@ impl Demo {
                 match t.phase {
                     Phase::Down => {
                         self.touch = Some((x, y));
+                        // botón X (cierre): la sub-app se apaga limpia desde
+                        // adentro — r10 quitó el "Detener" del host
+                        if x_hit(self.w as i32, self.ui as i32, x as i32, y as i32) {
+                            self.exit = Some("x");
+                            return;
+                        }
                         // botón: acción inmediata + visual hasta Up
                         let bots = self.botones();
                         for (i, b) in bots.iter().enumerate() {
@@ -235,14 +217,14 @@ impl Demo {
                     Phase::Move => self.touch = Some((x, y)),
                     Phase::Up => {
                         self.touch = None;
-                        self.pressed = [false, false, false];
+                        self.pressed = [false, false];
                     }
                 }
             }
         }
     }
 
-    /// Acción del botón `i` (0=Color, 1=Ping, 2=Salir).
+    /// Acción del botón `i` (0=Color, 1=Ping).
     fn accion(&mut self, i: usize) {
         match i {
             0 => self.hue_on = !self.hue_on,
@@ -250,7 +232,7 @@ impl Demo {
                 self.pings += 1;
                 emit_line(&format!("{{\"event\":\"pong\",\"seq\":{}}}", self.pings));
             }
-            _ => self.exit = Some("boton-salir"),
+            _ => {}
         }
     }
 
@@ -262,47 +244,57 @@ impl Demo {
         if self.hue_on {
             self.hue = (self.hue + 2) % 360;
         }
-        // pelota: resorte hacia el dedo, o rebote libre
+        // pelota: resorte hacia el dedo, o rebote libre. Velocidades y
+        // radios en unidades de diseño ×ui (a doble resolución se mueve
+        // al doble de px/s: conserva la velocidad VISUAL).
+        let ui_f = self.ui as f32;
+        let rad = 18.0 * ui_f;
         let (x0, y0, x1, y1) = self.zona_pelota();
         if let Some((tx, ty)) = self.touch {
-            self.ball.vx += (tx - self.ball.x).clamp(-40.0, 40.0) * 0.006 * dt;
-            self.ball.vy += (ty - self.ball.y).clamp(-40.0, 40.0) * 0.006 * dt;
+            self.ball.vx += (tx - self.ball.x).clamp(-40.0 * ui_f, 40.0 * ui_f) * 0.006 * ui_f * dt;
+            self.ball.vy += (ty - self.ball.y).clamp(-40.0 * ui_f, 40.0 * ui_f) * 0.006 * ui_f * dt;
         }
         // amortiguación y tope de velocidad
         self.ball.vx *= 0.995_f32.powf(dt / 16.0);
         self.ball.vy *= 0.995_f32.powf(dt / 16.0);
         let sp = (self.ball.vx * self.ball.vx + self.ball.vy * self.ball.vy).sqrt();
-        if sp > 4.0 {
-            let k = 4.0 / sp;
+        let vmax = 4.0 * ui_f;
+        if sp > vmax {
+            let k = vmax / sp;
             self.ball.vx *= k;
             self.ball.vy *= k;
         }
         self.ball.x += self.ball.vx * dt / 16.0;
         self.ball.y += self.ball.vy * dt / 16.0;
         // rebotes contra la zona
-        if self.ball.x < x0 + 18.0 {
-            self.ball.x = x0 + 18.0;
+        if self.ball.x < x0 + rad {
+            self.ball.x = x0 + rad;
             self.ball.vx = self.ball.vx.abs();
         }
-        if self.ball.x > x1 - 18.0 {
-            self.ball.x = x1 - 18.0;
+        if self.ball.x > x1 - rad {
+            self.ball.x = x1 - rad;
             self.ball.vx = -self.ball.vx.abs();
         }
-        if self.ball.y < y0 + 18.0 {
-            self.ball.y = y0 + 18.0;
+        if self.ball.y < y0 + rad {
+            self.ball.y = y0 + rad;
             self.ball.vy = self.ball.vy.abs();
         }
-        if self.ball.y > y1 - 18.0 {
-            self.ball.y = y1 - 18.0;
+        if self.ball.y > y1 - rad {
+            self.ball.y = y1 - rad;
             self.ball.vy = -self.ball.vy.abs();
         }
     }
 
     /// Pinta el frame completo (todas las coords clipean dentro del canvas).
-    /// `logo`: imagen embebida ya validada (evita validar por frame).
+    /// `logo`: imagen embebido ya validada (evita validar por frame).
+    ///
+    /// r10: medidas del "diseño 720p" ×[`ui_scale`] — en un fb ~666×1440
+    /// todo se duplica y conserva las proporciones.
     fn draw(&self, c: &mut Canvas, logo: RgbaImg) {
         let w = self.w as i32;
         let h = self.h as i32;
+        let ui = self.ui as i32;
+        let ui32 = self.ui;
 
         // Fondo: degradado oscuro con el tono actual.
         let top = hsv(self.hue, 90, 20);
@@ -314,47 +306,80 @@ impl Demo {
             0,
             0,
             w,
-            56,
+            56 * ui,
             Color {
                 a: 150,
                 ..Color::rgb(8, 10, 16)
             },
         );
-        c.draw_text(12, 6, "Arca F3a", 2, Color::rgb(240, 242, 250));
         c.draw_text(
-            12,
-            38,
+            12 * ui,
+            6 * ui,
+            "Arca F3a",
+            2 * ui32,
+            Color::rgb(240, 242, 250),
+        );
+        c.draw_text(
+            12 * ui,
+            38 * ui,
             "hola desde la sub-app nativa",
-            1,
+            ui32,
             Color::rgb(150, 160, 180),
         );
 
+        // Botón de cierre (X): la esquina superior derecha de la SUB-APP.
+        draw_x(c, w, ui);
+
         // Logo embebido (imagen con alfa) a la izquierda.
-        c.blit(12, 68, logo);
+        c.blit_scaled(
+            12 * ui,
+            68 * ui,
+            LOGO_LADO as i32 * ui,
+            LOGO_LADO as i32 * ui,
+            logo,
+        );
         // mini logo escalado (blit escalado) a la derecha del grande
-        c.blit_scaled(12 + LOGO_LADO as i32 + 10, 68, 64, 64, logo);
-        // telemetría al lado de los logos (etiquetas cortas: caben en 320px)
+        c.blit_scaled(
+            12 * ui + LOGO_LADO as i32 * ui + 10 * ui,
+            68 * ui,
+            64 * ui,
+            64 * ui,
+            logo,
+        );
+        // telemetría al lado de los logos (etiquetas cortas)
+        let tx = 12 * ui + LOGO_LADO as i32 * ui + 10 * ui + 64 * ui + 12 * ui;
+        let y0 = 72 * ui;
+        c.draw_text(tx, y0, "demo", ui32, Color::rgb(220, 225, 235));
         let mut buf = [0u8; 12];
-        let tx = 12 + LOGO_LADO as i32 + 10 + 64 + 12; // 194 con logo=96
-        let y0 = 72;
-        c.draw_text(tx, y0, "demo", 1, Color::rgb(220, 225, 235));
         let s = format_buf(&mut buf, self.frames);
-        c.draw_text(tx, y0 + 20, "frames", 1, Color::rgb(150, 160, 180));
-        c.draw_text(tx + 72, y0 + 20, s, 1, Color::rgb(190, 200, 215));
+        c.draw_text(tx, y0 + 20 * ui, "frames", ui32, Color::rgb(150, 160, 180));
+        c.draw_text(
+            tx + 72 * ui,
+            y0 + 20 * ui,
+            s,
+            ui32,
+            Color::rgb(190, 200, 215),
+        );
         let mut buf2 = [0u8; 12];
         let s2 = format_buf(&mut buf2, self.pings);
-        c.draw_text(tx, y0 + 40, "pings", 1, Color::rgb(150, 160, 180));
-        c.draw_text(tx + 72, y0 + 40, s2, 1, Color::rgb(190, 200, 215));
+        c.draw_text(tx, y0 + 40 * ui, "pings", ui32, Color::rgb(150, 160, 180));
+        c.draw_text(
+            tx + 72 * ui,
+            y0 + 40 * ui,
+            s2,
+            ui32,
+            Color::rgb(190, 200, 215),
+        );
 
         // Panel de "video" (animación procedural).
-        let vy = 176;
-        let vh = 120;
-        self.draw_video(c, 12, vy, w - 24, vh, logo);
+        let vy = 176 * ui;
+        let vh = 120 * ui;
+        self.draw_video(c, 12 * ui, vy, w - 24 * ui, vh, logo);
 
         // Pelota.
         let (bx, by) = (self.ball.x as i32, self.ball.y as i32);
-        c.fill_disc(bx, by, 16, Color::rgb(255, 122, 40));
-        c.fill_disc(bx - 4, by - 5, 5, Color::rgb(255, 205, 160));
+        c.fill_disc(bx, by, 16 * ui, Color::rgb(255, 122, 40));
+        c.fill_disc(bx - 4 * ui, by - 5 * ui, 5 * ui, Color::rgb(255, 205, 160));
 
         // Botones.
         let bots = self.botones();
@@ -365,19 +390,19 @@ impl Demo {
         // Barra inferior: telemetría + pista de uso.
         c.fill_rect(
             0,
-            h - 52,
+            h - 52 * ui,
             w,
-            52,
+            52 * ui,
             Color {
                 a: 170,
                 ..Color::rgb(8, 10, 16)
             },
         );
         c.draw_text(
-            12,
-            h - 44,
+            12 * ui,
+            h - 44 * ui,
             "toca la pelota y arrastrala",
-            1,
+            ui32,
             Color::rgb(150, 160, 180),
         );
         let touch_txt = match (self.touch, self.exit) {
@@ -390,55 +415,128 @@ impl Demo {
             "fps:{}  frames:{}  pings:{}  {}",
             fps, self.frames, self.pings, touch_txt
         );
-        c.draw_text(12, h - 24, &linea, 1, Color::rgb(190, 200, 215));
+        c.draw_text(
+            12 * ui,
+            h - 24 * ui,
+            &linea,
+            ui32,
+            Color::rgb(190, 200, 215),
+        );
     }
 
     /// Panel animado: barras cromáticas que se desplazan + logo rebotando.
     /// (Placeholder honesto del "video": sin decodificador no hay H.264 —
     /// ver NOTA al final de la doc del crate.)
     fn draw_video(&self, c: &mut Canvas, x: i32, y: i32, w: i32, h: i32, logo: RgbaImg) {
+        let ui = self.ui as i32;
         // marco
         c.fill_rect(x - 2, y - 2, w + 4, h + 4, Color::rgb(0, 0, 0));
         // barras verticales cíclicas (hue avanza con vid_t)
-        let paso = 24;
+        let paso = 24 * ui;
         let off = (self.vid_t / 6) as i32 % paso;
         let n = w / paso + 2;
         for i in 0..n {
             let hue = (self.hue + (i as u16) * 24 + (self.vid_t / 24) as u16) % 360;
             let col = hsv(hue, 160, 70);
-            c.fill_rect(x + i * paso - off, y, paso - 6, h, col);
+            c.fill_rect(x + i * paso - off, y, paso - 6 * ui, h, col);
         }
         // barrido brillante (línea vertical que recorre el panel)
         let sx = x + ((self.vid_t / 8) as i32 % (w.max(1)));
         c.fill_rect(
             sx,
             y,
-            3,
+            3 * ui,
             h,
             Color {
                 a: 140,
                 ..Color::rgb(255, 255, 255)
             },
         );
-        // logo "rebotando" dentro del panel (escala 48)
-        let inner = (w - 56).max(8) as u32;
+        // logo "rebotando" dentro del panel
+        let inner = (w - 56 * ui).max(8) as u32;
         let px = ((self.vid_t / 10) % (inner * 2)).min(inner) as i32; // triángulo
         let px = if (self.vid_t / 10) % (inner * 2) > inner {
             (inner * 2 - (self.vid_t / 10) % (inner * 2)) as i32
         } else {
             px
         };
-        c.blit_scaled(x + 4 + px, y + h - 56, 48, 48, logo);
+        c.blit_scaled(x + 4 + px, y + h - 56 * ui, 48 * ui, 48 * ui, logo);
         // etiqueta
         c.draw_text(
             x + 6,
             y + 6,
             "video procedural",
-            1,
+            self.ui,
             Color::rgb(255, 255, 255),
         );
     }
+}
 
+// ---------------------------------------------------------------------------
+// Escala de UI + botón de cierre X (r10)
+// ---------------------------------------------------------------------------
+
+/// Factor de escala de la UI sobre el "diseño 720p" del demo.
+///
+/// El host dimensiona el fb con lado mayor ≤ MAX_LADO (1440 desde r10):
+/// h=720 → 1 (diseño base, sin cambios), h≈1080-1440 → 2, h≈2160 → 3.
+/// El redondeo de 1080/720=1.5 a 2 es deliberado: mejor texto grande que
+/// texto diminuto. Mínimo 1 (los fbs chicos de qemu conservan el layout
+/// original); cap 3 para no disparar el costo de render.
+#[must_use]
+fn ui_scale(h: u16) -> u32 {
+    let s = (h as f32 / 720.0).round() as u32;
+    s.clamp(1, 3)
+}
+
+/// Zona táctil/dibujado del botón de cierre (diseño 720p: lado 40 en
+/// (w-52, 6)). Devuelve (x, y, lado).
+#[must_use]
+fn zona_x(w: i32, ui: i32) -> (i32, i32, i32) {
+    let side = 40 * ui;
+    (w - 52 * ui, 6 * ui, side)
+}
+
+/// ¿El toque (x, y) cae dentro del botón X? (hit-test puro, testeable).
+#[must_use]
+fn x_hit(w: i32, ui: i32, x: i32, y: i32) -> bool {
+    let (rx, ry, side) = zona_x(w, ui);
+    x >= rx && x < rx + side && y >= ry && y < ry + side
+}
+
+/// Pinta el botón de cierre: chip redondeado translúcido + X blanca.
+/// Dos trazos diagonales dibujados a pasos de `4·ui` px (barato y sin AA).
+fn draw_x(c: &mut Canvas, w: i32, ui: i32) {
+    let (x, y, side) = zona_x(w, ui);
+    let r = (side / 5).max(2);
+    c.fill_round_rect(
+        x,
+        y,
+        side,
+        side,
+        r,
+        Color {
+            a: 170,
+            ..Color::rgb(8, 10, 16)
+        },
+    );
+    c.draw_rect_outline(x, y, side, side, ui.max(1), Color::rgb(120, 130, 150));
+    // la X misma: margen side/4, trazos de grosor 4·ui
+    let pad = side / 4;
+    let inner = (side - 2 * pad).max(4);
+    let t = 4 * ui;
+    let mut i = 0;
+    while i + t <= inner {
+        c.fill_rect(x + pad + i, y + pad + i, t, t, Color::rgb(235, 238, 245));
+        c.fill_rect(
+            x + pad + inner - i - t,
+            y + pad + i,
+            t,
+            t,
+            Color::rgb(235, 238, 245),
+        );
+        i += t;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -961,7 +1059,7 @@ fn selftest() -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{fps_medida, STATS_CADA};
+    use super::{fps_medida, ui_scale, x_hit, zona_x, STATS_CADA};
 
     /// La aritmética del stats tal como la computa el bucle: `stats_f0`
     /// acumula 120, 240, 360… — la fórmula VIEJA restaba
@@ -987,5 +1085,47 @@ mod tests {
         assert_eq!(fps_medida(0, 4000), 0);
         assert_eq!(fps_medida(120, 0), 120_000); // dt degenerado
         assert_eq!(fps_medida(u64::MAX, 1), u64::MAX); // satura, no wrap
+    }
+
+    /// r10: escala de UI — diseño base 720p→1, teléfonos altos→2, cap 3.
+    #[test]
+    fn ui_scale_bordes() {
+        assert_eq!(ui_scale(240), 1); // selftest (320×240)
+        assert_eq!(ui_scale(360), 1); // fb chico de qemu
+        assert_eq!(ui_scale(720), 1); // diseño base
+        assert_eq!(ui_scale(1080), 2); // 1.5 redondea a 2
+        assert_eq!(ui_scale(1440), 2); // fb r10 del teléfono
+        assert_eq!(ui_scale(2160), 3);
+        assert_eq!(ui_scale(4096), 3); // cap
+        assert_eq!(ui_scale(0), 1); // absurdo pero sin pánico
+    }
+
+    /// r10: la X siempre cae dentro del canvas y el hit-test coincide con
+    /// la zona dibujada (esquina superior derecha) en todas las geometrías
+    /// que usa el host/qemu.
+    #[test]
+    fn zona_x_dentro_del_canvas_y_hit() {
+        for (w, h) in [(160, 360), (336, 720), (498, 1080), (666, 1440)] {
+            let ui = ui_scale(h) as i32;
+            let w = w as i32;
+            let h = h as i32;
+            let (x, y, side) = zona_x(w, ui);
+            assert!(x >= 0 && y >= 0, "({w}x{h}) zona negativa: {x},{y}");
+            assert!(
+                x + side <= w && y + side <= h,
+                "({w}x{h}) zona fuera del canvas: {x}+{side}>{w} o {y}+{side}>{h}"
+            );
+            // centro de la zona = hit; otros puntos = no hit
+            assert!(x_hit(w, ui, x + side / 2, y + side / 2), "({w}x{h}) centro");
+            assert!(!x_hit(w, ui, 0, 0), "({w}x{h}) el origen no es la X");
+            assert!(
+                !x_hit(w as i32, ui, x - 1, y + side / 2),
+                "({w}x{h}) borde izquierdo fuera"
+            );
+            assert!(
+                !x_hit(w as i32, ui, x, y - 1),
+                "({w}x{h}) borde superior fuera"
+            );
+        }
     }
 }

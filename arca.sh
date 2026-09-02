@@ -295,7 +295,7 @@ cmd_run() {
     else
         "$ADB" shell am start -n "$PAQUETE/.MainActivity" >/dev/null \
             || error "no pude lanzar la app"
-        ok "sonda F0 lanzada: mira el teléfono y pulsa el botón de ejecutar"
+        ok "home de Arca lanzado: demo incorporada, abrir binario del almacenamiento o instaladas"
     fi
 }
 
@@ -306,7 +306,7 @@ cmd_logs() {
     stamp="$(date +%Y%m%d-%H%M%S)"
     out="$LOGS_DIR/arca-logs-$stamp.txt"
     {
-        echo "=== Arca · registro del probe F0 + demo F3a (r5) ==="
+        echo "=== Arca · registro del home + demo F3a (r10) ==="
         echo "generado: $(date)"
         echo
         echo "-- teléfono --"

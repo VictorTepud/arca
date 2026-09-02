@@ -1,12 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!--
-      Tema del framework (android:Theme.Material.*): NO requiere AndroidX
-      ni ninguna librería externa. El probe dibuja su UI por código.
+      Temas del framework (android:Theme.Material.*): NO requiere AndroidX
+      ni ninguna librería externa. El host dibuja su UI por código.
+
+      r10:
+      · Theme.ArcaHome — el lanzador: sin ActionBar (el home dibuja su
+        propio título "Arca"), paleta teal del proyecto.
+      · Theme.ArcaView — el visor (DemoActivity): NoActionBar.Fullscreen +
+        fondo negro + status bar negra. Las barras del sistema además se
+        esconden inmersivas desde código (applyImmersive).
     -->
-    <style name="Theme.ArcaProbe" parent="android:Theme.Material.Light.DarkActionBar">
+    <style name="Theme.ArcaHome" parent="android:Theme.Material.NoActionBar">
         <item name="android:colorPrimary">#0F766E</item>
         <item name="android:colorPrimaryDark">#0B5A55</item>
         <item name="android:colorAccent">#14B8A6</item>
+        <item name="android:windowBackground">#101318</item>
+        <item name="android:statusBarColor">#0B5A55</item>
+    </style>
+
+    <style name="Theme.ArcaView" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:colorPrimary">#0F766E</item>
+        <item name="android:colorAccent">#14B8A6</item>
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#000000</item>
     </style>
 </resources>
