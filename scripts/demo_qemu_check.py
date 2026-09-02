@@ -6,7 +6,8 @@ ignora los bytes extra) bajo qemu-user y valida el contrato completo de
 la sub-app: hello, frames con rotación de slots, stats con fps sano
 (regresión r9: el underflow daba fps≈4.6e15), apagado limpio por
 stdin, el botón de cierre X (hit-test + píxeles dibujados) y las
-geometrías r11: fb 1:1 del visor real (~1049×2160) con UI base 540.
+geometrías reales del visor: 720×1536 del Huawei del usuario y
+~1049×2160 de un FHD, con la escala r13 (ui por AMBAS dimensiones).
 
 Uso:
     python3 scripts/demo_qemu_check.py [binario] [--qemu RUTA]
@@ -41,10 +42,17 @@ def region_len(w: int, h: int) -> int:
     return SLOTS * (SLOT_HDR + frame_bytes)
 
 
+def ui_mirror(w: int, h: int) -> int:
+    """Espejo de ui_scale del demo r13: min(w/336, h/720) contra el canvas
+    de diseño 336×720. Redondeo half-up (int(x+0.5), NO round() de python
+    que es banker's). R12 en el Huawei real (720×1536) daba ui=3 y el
+    contenido se veía enorme; r13 da ui=2."""
+    return max(1, min(4, int(min(w / 336, h / 720) + 0.5)))
+
+
 def zona_x(w: int, h: int) -> tuple[int, int, int]:
-    """Espejo de ui_scale/zona_x del demo (r11: base 540, lado 40 en
-    (w-52, 6)). OJO: int(x+0.5) y no round() de python (banker's)."""
-    ui = max(1, min(4, int(h / 540 + 0.5)))
+    """Espejo de zona_x del demo (lado 40·ui en (w-52·ui, 6·ui))."""
+    ui = ui_mirror(w, h)
     side = 40 * ui
     return w - 52 * ui, 6 * ui, side
 
@@ -318,11 +326,13 @@ def main() -> int:
         check_stats(check, d, "H")
     else:
         print("  [info] H: pocos frames bajo qemu para stats; se salta")
-    # panel de video (ui=3): x 36..684, y 528..888 — fila central
+    # panel de video: fila central con el ui del espejo r13 (ui=2 aquí)
+    ui = ui_mirror(720, 1536)
+    fila = (176 + 60) * ui
     viva = 0
     muestras = 0
-    for px in range(48, 672, 12):
-        r, g, b, a = d.fb_pixel(px, 708)
+    for px in range(20 * ui, 720 - 20 * ui, 4 * ui):
+        r, g, b, a = d.fb_pixel(px, fila)
         muestras += 1
         if a == 255 and (r + g + b) > 90:
             viva += 1

@@ -17,13 +17,13 @@
 //! esquina superior derecha (r10: la sub-app se apaga desde adentro — el
 //! host ya no tiene botón "Detener").
 //!
-//! r11: escala de UI base 540. El host ya dimensiona el fb con la
-//! superficie REAL de la vista (pantalla MENOS la barra de notificaciones,
-//! lado mayor ≤ MAX_LADO): en un FHD el fb es ~1049×2160, casi 1:1 con la
-//! vista — se acabó el pixelado del escalado. El layout sigue en unidades
-//! de diseño y se multiplica por [`ui_scale`] (≈h/540, cap 4): la base
-//! bajó de 720 a 540 porque con h/720 el texto pequeño quedaba en
-//! miniatura (r10 perdía un escalón completo en los fbs altos).
+//! r13: escala de UI por AMBAS dimensiones, contra el canvas de diseño
+//! del layout (336×720). El host dimensiona el fb con la superficie REAL
+//! de la vista (pantalla MENOS la barra de notificaciones, lado mayor ≤
+//! MAX_LADO): en el Huawei del usuario es 720×1536 y r11 (h/540) daba
+//! ui=3 → todo estirado ×3 sobre una pantalla ×2.13 → "muy enorme".
+//! Con min(w/336, h/720) esa geometría da ui=2 y recupera las
+//! proporciones r9 (que son las que este layout codifica).
 //!
 //! # Protocolo stdout (líneas JSON, dialecto F0 extendido)
 //!
@@ -123,7 +123,7 @@ impl Demo {
             hue_on: false,
             pings: 0,
             pressed: [false, false],
-            ui: ui_scale(h),
+            ui: ui_scale(w, h),
             exit: None,
             vid_t: 0,
             last_fps: (1000 / FRAME_MS) as u32,
@@ -477,18 +477,21 @@ impl Demo {
 // Escala de UI + botón de cierre X (r10)
 // ---------------------------------------------------------------------------
 
-/// Factor de escala de la UI sobre el diseño base (540 filas) del demo.
+/// Factor de escala de la UI contra el canvas de DISEÑO del layout
+/// (336 columnas × 720 filas — las coordenadas que `draw` codifica:
+/// título 56, panel 176..296, barra baja 52…).
 ///
-/// r11: el host dimensiona el fb con la superficie REAL de la vista
-/// (pantalla menos la barra de notificaciones; ver DemoActivity): un FHD
-/// típico da ~1049×2160, un QHD ~1023×2160 (cap MAX_LADO del host). Con
-/// la base r10 (h/720, cap 3) un fb de 2160 quedaba en ui=3 y el texto
-/// pequeño se veía en miniatura; base 540 + cap 4 devuelve un escalón
-/// completo: h≈540→1, ≈1080→2, ≈1440-1620→3, ≥1890→4. Mínimo 1 (los fbs
-/// chicos de qemu conservan el layout original).
+/// r13: se escala por AMBAS dimensiones con min(w/336, h/720). r11
+/// usaba solo h/540: en el Huawei real del usuario (fb 1:1 de
+/// 720×1536) daba ui=3 — la escala del diseño estirada ×3 sobre una
+/// pantalla que solo es ×2.13 respecto del canvas — y "todo se miraba
+/// muy enorme" (reporte en hardware). Con min() la UI nunca escala
+/// más que el eje más ajustado: 720×1536→2, 664×1440→2,
+/// 1049×2160→3, 336×720→1. Mínimo 1 (los fbs chicos de qemu
+/// conservan el layout original).
 #[must_use]
-fn ui_scale(h: u16) -> u32 {
-    let s = (h as f32 / 540.0).round() as u32;
+fn ui_scale(w: u16, h: u16) -> u32 {
+    let s = (w as f32 / 336.0).min(h as f32 / 720.0).round() as u32;
     s.clamp(1, 4)
 }
 
@@ -1097,19 +1100,22 @@ mod tests {
     }
 
     /// r11: escala de UI — base 540 (r10 usaba 720/cap 3 y el texto
-    /// pequeño quedaba en miniatura en los fbs 1:1 altos).
+    /// r13: escala de UI por AMBAS dimensiones (canvas de diseño
+    /// 336×720). r11 miraba solo h/540 → en el Huawei real (720×1536)
+    /// daba ui=3 y "todo se miraba muy enorme".
     #[test]
     fn ui_scale_bordes() {
-        assert_eq!(ui_scale(240), 1); // selftest (320×240)
-        assert_eq!(ui_scale(360), 1); // fb chico de qemu
-        assert_eq!(ui_scale(540), 1); // diseño base
-        assert_eq!(ui_scale(720), 1); // 1.33 → 1
-        assert_eq!(ui_scale(1080), 2); // 2.0 exacto
-        assert_eq!(ui_scale(1440), 3); // 2.67 → 3 (r10 daba 2)
-        assert_eq!(ui_scale(2160), 4); // fb r11 de un FHD 1:1
-        assert_eq!(ui_scale(2222), 4);
-        assert_eq!(ui_scale(4096), 4); // cap
-        assert_eq!(ui_scale(0), 1); // absurdo pero sin pánico
+        assert_eq!(ui_scale(320, 240), 1); // selftest
+        assert_eq!(ui_scale(160, 360), 1); // fb chico de qemu
+        assert_eq!(ui_scale(336, 720), 1); // canvas de diseño (r9)
+        assert_eq!(ui_scale(720, 1536), 2); // Huawei real (r12 daba 3 = enorme)
+        assert_eq!(ui_scale(664, 1440), 2); // geometría r10 (r11 daba 3)
+        assert_eq!(ui_scale(1049, 2160), 3); // fb 1:1 FHD
+        assert_eq!(ui_scale(1080, 2160), 3);
+        assert_eq!(ui_scale(2048, 1040), 1); // ancha: no estalla horizontal
+        assert_eq!(ui_scale(432, 4096), 1); // alta y angosta: no estalla
+        assert_eq!(ui_scale(3072, 6144), 4); // cap
+        assert_eq!(ui_scale(0, 0), 1); // absurdo pero sin pánico
     }
 
     /// r11: la zona de la pelota es válida en todas las geometrías y, en
@@ -1121,6 +1127,7 @@ mod tests {
             (160u16, 360u16, false),
             (336, 720, true),
             (664, 1440, true),
+            (720, 1536, true), // Huawei real del usuario (r13)
             (1049, 2160, true),
             (1080, 2222, true),
         ] {
@@ -1149,10 +1156,11 @@ mod tests {
             (336, 720),
             (498, 1080),
             (666, 1440),
+            (720, 1536), // Huawei real (r13)
             (1049, 2160),
             (1080, 2222),
         ] {
-            let ui = ui_scale(h) as i32;
+            let ui = ui_scale(w, h) as i32;
             let w = w as i32;
             let h = h as i32;
             let (x, y, side) = zona_x(w, ui);

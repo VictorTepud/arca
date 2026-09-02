@@ -22,8 +22,8 @@ android {
         // (docs/12, F5). Coste: no publicable en Play (irrelevante aquí).
         targetSdk = 28
 
-        versionCode = 4
-        versionName = "0.1.0-f3a.r12"
+        versionCode = 5
+        versionName = "0.1.0-f3a.r13"
     }
 
     buildTypes {

@@ -268,9 +268,14 @@ class MainActivity : Activity() {
                 setTextColor(0xFF6B7385.toInt())
                 setPadding(0, dp(48), 0, dp(48))
             }
+            // r13: el peso va en la COLUMNA (con span total para el
+            // estado vacío). En r11 el peso estaba en la FILA: columnas
+            // sin peso + width 0 → columnas de 0 px → el grid quedaba
+            // INVISIBLE ("no genera ninguna lista") aunque el escaneo de
+            // filesDir/exec funcionaba y las celdas existían.
             val lp = GridLayout.LayoutParams(
-                GridLayout.spec(GridLayout.UNDEFINED, 1, 1f),
-                GridLayout.spec(GridLayout.UNDEFINED)
+                GridLayout.spec(GridLayout.UNDEFINED),
+                GridLayout.spec(GridLayout.UNDEFINED, grid.columnCount, 1f)
             )
             lp.width = 0
             vacio.layoutParams = lp
@@ -318,9 +323,14 @@ class MainActivity : Activity() {
                 )
             )
         }
+        // r13: peso en la COLUMNA (1 columna, weight 1) → cada celda toma
+        // 1/columnCount del ancho. El bug de r11: el peso estaba en el
+        // ROW spec (inútil dentro de un ScrollView) y las columnas
+        // quedaban sin peso con width=0 → columnas de 0 px → celdas
+        // invisibles con el escaneo funcionando.
         val lp = GridLayout.LayoutParams(
-            GridLayout.spec(GridLayout.UNDEFINED, 1, 1f),
-            GridLayout.spec(GridLayout.UNDEFINED)
+            GridLayout.spec(GridLayout.UNDEFINED),
+            GridLayout.spec(GridLayout.UNDEFINED, 1, 1f)
         )
         lp.width = 0
         celda.layoutParams = lp
