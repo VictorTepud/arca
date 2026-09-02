@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  arca.sh — Arca F0-F3a (r5): TODO en un solo comando
+#  arca.sh — Arca F0-F3a (r11): TODO en un solo comando
 #
-#  Basado en el proyecto completo (26 crates) con el fix de las e2e flaky (r4)
-#  + el probe visual F3a (r5): devapp-demo pinta botones/imagen/animación
-#  en pantalla y responde al dedo (framebuffer compartido + stdio).
+#  Basado en el proyecto completo (26 crates) + probe visual F3a: devapp-demo
+#  pinta botones/imagen/animación en pantalla y responde al dedo
+#  (framebuffer compartido + stdio).
+#
+#  r11: los binarios llevan footer ARCAAPP1 (nombre+icono, ver
+#  scripts/empaqueta_app.py) y `run` los sube al teléfono por run-as
+#  (pipe base64) en vez de empaquetarlos como assets del APK.
 #
 #  Uso:
 #    ./arca.sh todo            # deps + test + build + install + run demo + logs
 #    ./arca.sh deps            # Rust + targets musl + JDK + SDK + Gradle (1.ª vez)
 #    ./arca.sh test            # 6 e2e del motor + selftest del demo EN TU PC
-#    ./arca.sh build           # devapp-hello + devapp-demo (arm64, SIN NDK) + APK
+#    ./arca.sh build           # devapp-hello + devapp-demo (arm64, SIN NDK) + footer + APK
 #    ./arca.sh install         # instala el APK (adb)
-#    ./arca.sh run [hello|demo]  # lanza el probe F0 o el demo F3a (default: demo)
+#    ./arca.sh run [demo|home] # sube el demo por run-as y lo lanza / abre el lanzador
 #    ./arca.sh logs            # guarda logs/arca-logs-*.txt (el archivo a enviar)
 #    ./arca.sh limpiar         # borra compilados (conserva dependencias)
 #
@@ -26,12 +30,11 @@ SDK="$TOOLS/android-sdk"
 GRADLE_HOME="$TOOLS/gradle-8.9"
 LOGS_DIR="$REPO_ROOT/logs"
 HOST_PROBE_DIR="$REPO_ROOT/host-probe"
-ASSET_HELLO="$HOST_PROBE_DIR/app/src/main/assets/devapp-hello"
-ASSET_DEMO="$HOST_PROBE_DIR/app/src/main/assets/devapp-demo"
 APK="$HOST_PROBE_DIR/app/build/outputs/apk/debug/app-debug.apk"
 PAQUETE="dev.arca.probe"
 BIN_ARM64="$REPO_ROOT/target/aarch64-unknown-linux-musl/release/devapp-hello"
 BIN_DEMO_ARM64="$REPO_ROOT/target/aarch64-unknown-linux-musl/release/devapp-demo"
+ICONO_DEMO="$REPO_ROOT/crates/L3-devapps/devapp-demo/assets/icono.png"
 
 C_R='\033[0;31m'; C_G='\033[0;32m'; C_Y='\033[0;33m'; C_B='\033[0;34m'; C_0='\033[0m'
 info()  { printf "${C_B}[arca ]${C_0} %s\n" "$*"; }
@@ -259,9 +262,16 @@ cmd_build() {
     done
     ok "devapp-hello y devapp-demo: ELF estático-PIE verificados (bytes)"
 
-    info "copiando los binarios a los assets del APK..."
-    cp "$BIN_ARM64" "$ASSET_HELLO"
-    cp "$BIN_DEMO_ARM64" "$ASSET_DEMO"
+    # r11: footer ARCAAPP1 — nombre + icono viajan DENTRO del binario; el
+    # lanzador los lee para el grid (el loader de ELF ignora los bytes tras
+    # el último segmento: sigue siendo ejecutable tal cual).
+    info "empaquetando nombre+icono (footer ARCAAPP1)..."
+    python3 "$REPO_ROOT/scripts/empaqueta_app.py" "$BIN_DEMO_ARM64" \
+        --name "Demo Arca" --icono "$ICONO_DEMO" \
+        || error "falló el empaquetado del demo"
+    python3 "$REPO_ROOT/scripts/empaqueta_app.py" "$BIN_ARM64" \
+        --name "Arca Hello" \
+        || error "falló el empaquetado de hello"
 
     info "construyendo el APK (la primera vez descarga dependencias de Gradle)..."
     export ANDROID_HOME="$SDK"
@@ -285,17 +295,41 @@ cmd_install() {
     ok "APK instalado ($PAQUETE)"
 }
 
+# Sube un binario al área privada del app (filesDir/exec) SIN assets:
+# adb push a /data/local/tmp no siempre es legible por el app (SELinux
+# shell_data_file), así que el contenido viaja por stdin en base64 y se
+# decodifica YA como uid del app (run-as; el APK debug es debuggable).
+subir_binario() {
+    local bin="$1" destino="$2"
+    [ -f "$bin" ] || error "no existe $bin (¿corriste ./arca.sh build?)"
+    "$ADB" shell run-as "$PAQUETE" mkdir -p files/exec \
+        || error "run-as falló (¿instalaste el APK debug? ./arca.sh install)"
+    base64 "$bin" \
+        | "$ADB" shell "base64 -d | run-as $PAQUETE sh -c 'cat > files/exec/$destino && chmod 700 files/exec/$destino'" \
+        || error "no pude subir $destino al teléfono"
+    local local_b remoto_b
+    local_b="$(stat -c %s "$bin")"
+    remoto_b="$("$ADB" shell run-as "$PAQUETE" stat -c %s "files/exec/$destino" | tr -d '\r')"
+    [ "$local_b" = "$remoto_b" ] \
+        || error "tamaño distinto tras subir ($local_b vs $remoto_b): reintenta"
+    ok "subido: files/exec/$destino ($remoto_b B, con footer ARCAAPP1)"
+}
+
 cmd_run() {
     adb_requerido
     local modo="${1:-demo}"
-    if [ "$modo" = "demo" ]; then
-        "$ADB" shell am start -n "$PAQUETE/.DemoActivity" >/dev/null \
+    if [ "$modo" = "home" ] || [ "$modo" = "hello" ]; then
+        "$ADB" shell am start -n "$PAQUETE/.MainActivity" >/dev/null \
+            || error "no pude lanzar el lanzador"
+        ok "lanzador abierto: grid de instaladas + botón + para añadir"
+    else
+        # r11: sin asset en el APK — el binario sube por run-as y se lanza
+        # con el extra "bin" (DemoActivity ya NO tiene demo incorporada).
+        subir_binario "$BIN_DEMO_ARM64" devapp-demo
+        "$ADB" shell am start -n "$PAQUETE/.DemoActivity" \
+            --es bin "/data/data/$PAQUETE/files/exec/devapp-demo" >/dev/null \
             || error "no pude lanzar el demo (¿corriste ./arca.sh build?)"
         ok "demo F3a lanzado: toca la pantalla del teléfono (botones y pelota)"
-    else
-        "$ADB" shell am start -n "$PAQUETE/.MainActivity" >/dev/null \
-            || error "no pude lanzar la app"
-        ok "home de Arca lanzado: demo incorporada, abrir binario del almacenamiento o instaladas"
     fi
 }
 
@@ -306,7 +340,7 @@ cmd_logs() {
     stamp="$(date +%Y%m%d-%H%M%S)"
     out="$LOGS_DIR/arca-logs-$stamp.txt"
     {
-        echo "=== Arca · registro del home + demo F3a (r10) ==="
+        echo "=== Arca · registro del lanzador + demo F3a (r11) ==="
         echo "generado: $(date)"
         echo
         echo "-- teléfono --"
@@ -358,14 +392,14 @@ cmd_limpiar() {
 
 uso() {
     cat <<'EOF'
-arca.sh — Arca F0-F3a (r5): construye, instala y corre el probe en tu Android
+arca.sh — Arca F0-F3a (r11): construye, instala y corre el probe en tu Android
 
   ./arca.sh todo             flujo completo: deps + test + build + install + run demo + logs
   ./arca.sh deps             instalar dependencias (Rust, JDK, Android SDK, Gradle)
   ./arca.sh test             6 e2e del motor + selftest del demo en tu PC
-  ./arca.sh build            compilar devapp-hello + devapp-demo (arm64, sin NDK) + APK
+  ./arca.sh build            compilar devapps (arm64, sin NDK) + footer ARCAAPP1 + APK
   ./arca.sh install          instalar el APK en el teléfono (adb)
-  ./arca.sh run [hello|demo] lanzar el probe F0 (hello) o el demo F3a (demo, default)
+  ./arca.sh run [demo|home]  subir el demo por run-as y lanzarlo (default) / abrir el lanzador
   ./arca.sh logs             guardar los logs en logs/arca-logs-*.txt (para enviar)
   ./arca.sh limpiar          borrar compilados
 

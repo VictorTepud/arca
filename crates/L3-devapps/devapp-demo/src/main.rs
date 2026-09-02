@@ -17,10 +17,13 @@
 //! esquina superior derecha (r10: la sub-app se apaga desde adentro — el
 //! host ya no tiene botón "Detener").
 //!
-//! r10: escala de UI. El fb del teléfono pasó de ~336×720 a ~666×1440
-//! (MAX_LADO del host 720→1440): todo el layout está expresado en un
-//! "diseño 720p" y se multiplica por [`ui_scale`] (≈h/720) para que en
-//! resoluciones altas no quede una hormiga de UI.
+//! r11: escala de UI base 540. El host ya dimensiona el fb con la
+//! superficie REAL de la vista (pantalla MENOS la barra de notificaciones,
+//! lado mayor ≤ MAX_LADO): en un FHD el fb es ~1049×2160, casi 1:1 con la
+//! vista — se acabó el pixelado del escalado. El layout sigue en unidades
+//! de diseño y se multiplica por [`ui_scale`] (≈h/540, cap 4): la base
+//! bajó de 720 a 540 porque con h/720 el texto pequeño quedaba en
+//! miniatura (r10 perdía un escalón completo en los fbs altos).
 //!
 //! # Protocolo stdout (líneas JSON, dialecto F0 extendido)
 //!
@@ -172,15 +175,20 @@ impl Demo {
     }
 
     /// Zona libre de la pelota (debajo del panel de video, encima de botones).
+    /// r11: el tope se ancla justo debajo del panel (176+120+12 = 308 del
+    /// diseño) en vez de `h-320·ui`: con la base 540 los fbs altos tienen
+    /// menos filas de diseño y la fórmula vieja dejaba la pelota rebotando
+    /// DENTRO del panel de video.
     fn zona_pelota(&self) -> (f32, f32, f32, f32) {
         let ui = self.ui as i32;
-        let top = (self.h as i32).saturating_sub(320 * ui).max(180 * ui) as f32;
-        let bottom = (self.h as i32 - 140 * ui).max(top as i32 + 24) as f32;
+        let h = self.h as i32;
+        let top = (308 * ui).min(h - 160 * ui).max(1);
+        let bottom = (h - 140 * ui).max(top + 24);
         (
             12.0 * ui as f32,
-            top,
+            top as f32,
             (self.w as i32 - 12 * ui) as f32,
-            bottom,
+            bottom as f32,
         )
     }
 
@@ -338,16 +346,10 @@ impl Demo {
             LOGO_LADO as i32 * ui,
             logo,
         );
-        // mini logo escalado (blit escalado) a la derecha del grande
-        c.blit_scaled(
-            12 * ui + LOGO_LADO as i32 * ui + 10 * ui,
-            68 * ui,
-            64 * ui,
-            64 * ui,
-            logo,
-        );
-        // telemetría al lado de los logos (etiquetas cortas)
-        let tx = 12 * ui + LOGO_LADO as i32 * ui + 10 * ui + 64 * ui + 12 * ui;
+        // telemetría a la derecha del logo (r11: sin mini-logo — el logo
+        // rebotando del panel de video ya demuestra el blit escalado, y el
+        // ancho de diseño cayó con la base 540: los píxeles sobran)
+        let tx = (12 + LOGO_LADO as i32 + 10) * ui;
         let y0 = 72 * ui;
         c.draw_text(tx, y0, "demo", ui32, Color::rgb(220, 225, 235));
         let mut buf = [0u8; 12];
@@ -398,23 +400,22 @@ impl Demo {
                 ..Color::rgb(8, 10, 16)
             },
         );
+        // línea 1: pista de uso, posición del dedo o motivo de salida
+        let pista = match (self.touch, self.exit) {
+            (Some((x, y)), _) => format!("x:{} y:{}", x as i32, y as i32),
+            (None, Some(r)) => format!("saliendo: {r}"),
+            (None, None) => "toca la pelota y arrastrala".to_string(),
+        };
         c.draw_text(
             12 * ui,
             h - 44 * ui,
-            "toca la pelota y arrastrala",
+            &pista,
             ui32,
             Color::rgb(150, 160, 180),
         );
-        let touch_txt = match (self.touch, self.exit) {
-            (Some((x, y)), _) => format!("x:{} y:{}", x as i32, y as i32),
-            (None, Some(r)) => format!("saliendo: {r}"),
-            (None, None) => "sin toque".to_string(),
-        };
-        let fps = self.last_fps;
-        let linea = format!(
-            "fps:{}  frames:{}  pings:{}  {}",
-            fps, self.frames, self.pings, touch_txt
-        );
+        // línea 2: telemetría compacta (r11: sin pings/touch — el ancho de
+        // diseño cayó a ~249 columnas y la línea larga del r10 clipeaba)
+        let linea = format!("fps:{}  frames:{}", self.last_fps, self.frames);
         c.draw_text(
             12 * ui,
             h - 24 * ui,
@@ -476,17 +477,19 @@ impl Demo {
 // Escala de UI + botón de cierre X (r10)
 // ---------------------------------------------------------------------------
 
-/// Factor de escala de la UI sobre el "diseño 720p" del demo.
+/// Factor de escala de la UI sobre el diseño base (540 filas) del demo.
 ///
-/// El host dimensiona el fb con lado mayor ≤ MAX_LADO (1440 desde r10):
-/// h=720 → 1 (diseño base, sin cambios), h≈1080-1440 → 2, h≈2160 → 3.
-/// El redondeo de 1080/720=1.5 a 2 es deliberado: mejor texto grande que
-/// texto diminuto. Mínimo 1 (los fbs chicos de qemu conservan el layout
-/// original); cap 3 para no disparar el costo de render.
+/// r11: el host dimensiona el fb con la superficie REAL de la vista
+/// (pantalla menos la barra de notificaciones; ver DemoActivity): un FHD
+/// típico da ~1049×2160, un QHD ~1023×2160 (cap MAX_LADO del host). Con
+/// la base r10 (h/720, cap 3) un fb de 2160 quedaba en ui=3 y el texto
+/// pequeño se veía en miniatura; base 540 + cap 4 devuelve un escalón
+/// completo: h≈540→1, ≈1080→2, ≈1440-1620→3, ≥1890→4. Mínimo 1 (los fbs
+/// chicos de qemu conservan el layout original).
 #[must_use]
 fn ui_scale(h: u16) -> u32 {
-    let s = (h as f32 / 720.0).round() as u32;
-    s.clamp(1, 3)
+    let s = (h as f32 / 540.0).round() as u32;
+    s.clamp(1, 4)
 }
 
 /// Zona táctil/dibujado del botón de cierre (diseño 720p: lado 40 en
@@ -812,11 +815,16 @@ fn run() -> Result<(), String> {
     let mut stats_f0 = 0u32;
 
     loop {
-        // 1) esperar hasta el próximo tick vigilando stdin
+        // 1) esperar hasta el próximo tick vigilando stdin. r11: el drenaje
+        //    de stdin es ahora SIEMPRE no-bloqueante cuando wait==0: si el
+        //    render tarda más que un frame (teléfono lento, qemu), la rama
+        //    vieja saltaba poll_stdin en TODOS los ticks y un shutdown o un
+        //    toque quedaba esperando en el pipe (el host terminaba matando
+        //    por señal — menos limpio, y con lag de input).
         let now = mono_ms()?;
         let wait = next.saturating_sub(now).min(500) as i32;
-        if wait > 0 {
-            if stdin_open && poll_stdin(wait)? {
+        if stdin_open {
+            if poll_stdin(if wait > 0 { wait } else { 0 })? {
                 match read_stdin(&mut rx_buf)? {
                     StdinEvent::Data => {
                         for line in drain_lines(&mut rx_buf) {
@@ -829,9 +837,10 @@ fn run() -> Result<(), String> {
                     StdinEvent::Closed => stdin_open = false,
                     StdinEvent::NoData => {}
                 }
-            } else if !stdin_open {
-                std::thread::sleep(Duration::from_millis(wait as u64));
             }
+            // (poll ya esperó `wait` ms si tocaba; con wait==0 no duerme)
+        } else if wait > 0 {
+            std::thread::sleep(Duration::from_millis(wait as u64));
         }
 
         // 2) tick de frame
@@ -1059,7 +1068,7 @@ fn selftest() -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{fps_medida, ui_scale, x_hit, zona_x, STATS_CADA};
+    use super::{Demo, fps_medida, ui_scale, x_hit, zona_x, STATS_CADA};
 
     /// La aritmética del stats tal como la computa el bucle: `stats_f0`
     /// acumula 120, 240, 360… — la fórmula VIEJA restaba
@@ -1087,17 +1096,47 @@ mod tests {
         assert_eq!(fps_medida(u64::MAX, 1), u64::MAX); // satura, no wrap
     }
 
-    /// r10: escala de UI — diseño base 720p→1, teléfonos altos→2, cap 3.
+    /// r11: escala de UI — base 540 (r10 usaba 720/cap 3 y el texto
+    /// pequeño quedaba en miniatura en los fbs 1:1 altos).
     #[test]
     fn ui_scale_bordes() {
         assert_eq!(ui_scale(240), 1); // selftest (320×240)
         assert_eq!(ui_scale(360), 1); // fb chico de qemu
-        assert_eq!(ui_scale(720), 1); // diseño base
-        assert_eq!(ui_scale(1080), 2); // 1.5 redondea a 2
-        assert_eq!(ui_scale(1440), 2); // fb r10 del teléfono
-        assert_eq!(ui_scale(2160), 3);
-        assert_eq!(ui_scale(4096), 3); // cap
+        assert_eq!(ui_scale(540), 1); // diseño base
+        assert_eq!(ui_scale(720), 1); // 1.33 → 1
+        assert_eq!(ui_scale(1080), 2); // 2.0 exacto
+        assert_eq!(ui_scale(1440), 3); // 2.67 → 3 (r10 daba 2)
+        assert_eq!(ui_scale(2160), 4); // fb r11 de un FHD 1:1
+        assert_eq!(ui_scale(2222), 4);
+        assert_eq!(ui_scale(4096), 4); // cap
         assert_eq!(ui_scale(0), 1); // absurdo pero sin pánico
+    }
+
+    /// r11: la zona de la pelota es válida en todas las geometrías y, en
+    /// las de tamaño real, nace DEBAJO del panel de video (la fórmula r10
+    /// la dejaba rebotando dentro del panel con la base 540).
+    #[test]
+    fn zona_pelota_bajo_el_panel() {
+        for (w, h, bajo_panel) in [
+            (160u16, 360u16, false),
+            (336, 720, true),
+            (664, 1440, true),
+            (1049, 2160, true),
+            (1080, 2222, true),
+        ] {
+            let d = Demo::new(w, h);
+            let (x0, y0, x1, y1) = d.zona_pelota();
+            assert!(y0 >= 1.0 && y0 < y1, "({w}x{h}) zona vacía: {y0}..{y1}");
+            assert!(x0 >= 0.0 && x1 > x0, "({w}x{h}) x degenerado: {x0}..{x1}");
+            assert!(x1 <= w as f32 && y1 <= h as f32, "({w}x{h}) fuera de canvas");
+            if bajo_panel {
+                let panel_fin = 308.0 * d.ui as f32;
+                assert!(
+                    y0 >= panel_fin,
+                    "({w}x{h}) la pelota nace dentro del video: y0={y0} < {panel_fin}"
+                );
+            }
+        }
     }
 
     /// r10: la X siempre cae dentro del canvas y el hit-test coincide con
@@ -1105,7 +1144,14 @@ mod tests {
     /// que usa el host/qemu.
     #[test]
     fn zona_x_dentro_del_canvas_y_hit() {
-        for (w, h) in [(160, 360), (336, 720), (498, 1080), (666, 1440)] {
+        for (w, h) in [
+            (160, 360),
+            (336, 720),
+            (498, 1080),
+            (666, 1440),
+            (1049, 2160),
+            (1080, 2222),
+        ] {
             let ui = ui_scale(h) as i32;
             let w = w as i32;
             let h = h as i32;

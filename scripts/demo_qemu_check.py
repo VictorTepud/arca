@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Harness del demo F3a en modo teléfono, SIN teléfono.
 
-Ejecuta el binario REAL (aarch64 musl) bajo qemu-user y valida el contrato
-completo de la sub-app: hello, frames con rotación de slots, stats con fps
-sano (regresión r9: el underflow daba fps≈4.6e15), apagado limpio por
-stdin y, desde r10, el botón de cierre X (hit-test + píxeles dibujados) y
-la geometría alta ~664×1440 con la UI escalada.
+Ejecuta el binario REAL (aarch64 musl, con footer ARCAAPP1 — el loader
+ignora los bytes extra) bajo qemu-user y valida el contrato completo de
+la sub-app: hello, frames con rotación de slots, stats con fps sano
+(regresión r9: el underflow daba fps≈4.6e15), apagado limpio por
+stdin, el botón de cierre X (hit-test + píxeles dibujados) y las
+geometrías r11: fb 1:1 del visor real (~1049×2160) con UI base 540.
 
 Uso:
     python3 scripts/demo_qemu_check.py [binario] [--qemu RUTA]
@@ -41,8 +42,9 @@ def region_len(w: int, h: int) -> int:
 
 
 def zona_x(w: int, h: int) -> tuple[int, int, int]:
-    """Espejo de ui_scale/zona_x del demo (diseño 720p, lado 40 en (w-52,6))."""
-    ui = max(1, min(3, round(h / 720)))
+    """Espejo de ui_scale/zona_x del demo (r11: base 540, lado 40 en
+    (w-52, 6)). OJO: int(x+0.5) y no round() de python (banker's)."""
+    ui = max(1, min(4, int(h / 540 + 0.5)))
     side = 40 * ui
     return w - 52 * ui, 6 * ui, side
 
@@ -146,7 +148,8 @@ class Check:
 
 
 def run_demo_for(
-    check: Check, qemu: str, bin: str, w: int, h: int, secs: float, tag: str
+    check: Check, qemu: str, bin: str, w: int, h: int, secs: float, tag: str,
+    min_frames: int = 30,
 ) -> Demo:
     """Corre `secs` segundos y apaga con shutdown (contrato del host)."""
     print(f"— corrida {tag}: fb {w}x{h}, {secs:.0f} s, apagado por stdin —")
@@ -164,7 +167,7 @@ def run_demo_for(
         f"{tag}: hello reporta la geometría ({hello.get('w')}x{hello.get('h')})",
     )
     frames = d.events("frame")
-    check.that(len(frames) > 30, f"{tag}: frames publicados ({len(frames)})")
+    check.that(len(frames) > min_frames, f"{tag}: frames publicados ({len(frames)})")
     slots = [f.get("slot") for f in frames]
     check.that(
         all(s in (0, 1) for s in slots), f"{tag}: slots siempre 0/1"
@@ -209,14 +212,17 @@ def check_stats(check: Check, d: Demo, tag: str) -> None:
     )
 
 
-def run_x_button(check: Check, qemu: str, bin: str, w: int, h: int, tag: str) -> None:
+def run_x_button(
+    check: Check, qemu: str, bin: str, w: int, h: int, tag: str,
+    maduracion: float = 3.0,
+) -> None:
     """El botón X: un toque fuera NO mata; el toque en la X sí (exit 0)."""
     print(f"— corrida {tag}: botón X en {w}x{h} —")
     x, y, side = zona_x(w, h)
     cx, cy = x + side // 2, y + side // 2
     d = Demo(qemu, bin, w, h)
-    # 1) maduración: que publique frames
-    deadline = time.time() + 3.0
+    # 1) maduración: que publique frames (en fbs grandes bajo qemu tarda)
+    deadline = time.time() + maduracion
     while time.time() < deadline and d.proc.poll() is None and len(d.events("frame")) < 10:
         time.sleep(0.1)
     # 2) toque en el CENTRO (fuera de la X y de los botones): no debe morir
@@ -284,17 +290,27 @@ def main() -> int:
     check_stats(check, d, "B")
     d.close()
 
-    # C) geometría r10 del teléfono (ui=2: X más grande, UI escalada)
-    d = run_demo_for(check, qemu, bin, 664, 1440, 12, "C(664x1440)")
+    # C) geometría alta r10/r11 bajo qemu (ui=3 con la base 540)
+    d = run_demo_for(check, qemu, bin, 666, 1440, 12, "C(666x1440)")
     if len(d.events("frame")) >= 120:
         check_stats(check, d, "C")
     else:
         print("  [info] C: pocos frames bajo qemu para stats; se salta")
     d.close()
 
-    # D) el botón X (ui=1)  E) el botón X (ui=2, la geometría real r10)
+    # F) geometría r11 REAL del visor: fb 1:1 en un FHD (ui=4). Bajo qemu
+    # renderiza ~2.27 Mpx/frame: umbral bajo y stats condicionales.
+    d = run_demo_for(check, qemu, bin, 1049, 2160, 20, "F(1049x2160)", min_frames=20)
+    if len(d.events("frame")) >= 120:
+        check_stats(check, d, "F")
+    else:
+        print("  [info] F: pocos frames bajo qemu para stats; se salta")
+    d.close()
+
+    # D) el botón X (ui=1)  E) el botón X (ui=3)  G) la X en el fb 1:1 (ui=4)
     run_x_button(check, qemu, bin, 336, 720, "D(336x720)")
-    run_x_button(check, qemu, bin, 664, 1440, "E(664x1440)")
+    run_x_button(check, qemu, bin, 666, 1440, "E(666x1440)")
+    run_x_button(check, qemu, bin, 1049, 2160, "G(1049x2160)", maduracion=10.0)
 
     total = check.ok + check.fail
     print(f"\n{check.ok}/{total} comprobaciones OK")

@@ -2,22 +2,19 @@
 <resources>
     <string name="app_name">Arca</string>
 
-    <!-- r10: home (lanzador de sub-apps) -->
-    <string name="home_title">Arca</string>
-    <string name="home_sub">host F3a · sub-apps nativas aarch64 · targetSdk 28 (grieta de exec)</string>
-    <string name="btn_run_demo">Ejecutar demo incorporada</string>
-    <string name="btn_open">Abrir binario desde el almacenamiento…</string>
-    <string name="installed_header">Instaladas (files/exec) · tocar = ejecutar · mantener = borrar</string>
-    <string name="installed_empty">— ninguna todavía: abre un binario devapp desde el almacenamiento —</string>
-    <string name="installed_row">%1$s · %2$s</string>
-    <string name="confirm_delete">¿Borrar %1$s de las instaladas?</string>
+    <!-- r11: lanzador limpio — sin datos técnicos, sin demo incorporada -->
+    <string name="apps_title">Aplicaciones</string>
+    <string name="apps_empty">Todavía no hay apps.\nPulsa + para abrir un binario desde el almacenamiento.</string>
+    <string name="fab_abrir">Abrir binario desde el almacenamiento</string>
+    <string name="confirm_delete">¿Desinstalar %1$s?</string>
 
-    <!-- toasts del home + visor -->
+    <!-- toasts del lanzador + visor -->
     <string name="toast_installed">Instalada: %1$s</string>
     <string name="toast_deleted">Eliminada: %1$s</string>
     <string name="toast_delete_fail">No pude borrar %1$s</string>
     <string name="toast_copy_fail">No pude copiar el binario: %1$s</string>
-    <string name="toast_exec_fail">No pude ejecutar el binario: %1$s (¿ELF aarch64 estático?)</string>
-    <string name="toast_no_binary">Binario inaccesible: %1$s — lanzo el demo incorporado</string>
-    <string name="toast_child_fail">Sub-app FATAL: %1$s</string>
+    <string name="toast_exec_fail">No pude ejecutar la app: %1$s (¿binario devapp arm64?)</string>
+    <string name="toast_no_binary">No hay binario que ejecutar: ábrela desde el lanzador</string>
+    <string name="toast_no_binary_file">No encuentro el binario: %1$s</string>
+    <string name="toast_child_fail">La app se cerró con error: %1$s</string>
 </resources>

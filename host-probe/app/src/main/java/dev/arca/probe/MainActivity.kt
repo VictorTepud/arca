@@ -3,103 +3,90 @@ package dev.arca.probe
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
-import android.graphics.Typeface
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Log
+import android.util.TypedValue
 import android.view.Gravity
-import android.widget.Button
+import android.view.View
+import android.widget.FrameLayout
+import android.widget.GridLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.io.File
 import java.io.IOException
+import java.io.RandomAccessFile
 import kotlin.concurrent.thread
 
 /**
- * Home de Arca (r10) — el "lanzador" de sub-apps nativas.
+ * Lanzador de sub-apps nativas (r11).
  *
- * La vieja pantalla del probe F0 (botón hello + log) cumplió su ciclo: el
- * gate fue GO hace revisiones y el log vivía en logcat. El home ahora es
- * mínimo y útil:
+ * Pantalla principal rediseñada tras el feedback de r10:
+ *  · GRID de apps instaladas (icono + nombre) — tocar ejecuta, mantener
+ *    pulsado desinstala. Las apps instaladas viven en `filesDir/exec`.
+ *  · Un único botón flotante circular "+" para abrir un binario desde el
+ *    almacenamiento (SAF ACTION_OPEN_DOCUMENT): se copia a filesDir/exec
+ *    con chmod +x y se lanza. Sin botones de texto, sin datos técnicos.
+ *  · La demo incorporada del APK se RETIRÓ (r11): el usuario ya carga sus
+ *    propios binarios con el +.
  *
- *  1. **Ejecutar demo incorporada** — lanza [DemoActivity] con el
- *     `devapp-demo` empaquetado en el APK (asset).
- *  2. **Abrir binario desde el almacenamiento…** — picker SAF
- *     (ACTION_OPEN_DOCUMENT): copia el archivo elegido a
- *     `filesDir/exec/` con chmod 7→ (la MISMA grieta de targetSdk 28
- *     que ya usa el demo: dominio SELinux untrusted_app_27 permite
- *     execve en /data/data) y lo lanza en el visor.
- *
- *     Sirve para CUALQUIER binario compilado para el contrato de sub-app:
- *     ELF aarch64 estático (musl), frames JSON por stdout, touch JSON por
- *     stdin, env ARCA_FB/ARCA_FB_W/ARCA_FB_H — o sea, cualquier devapp de
- *     este repo (`./arca.sh build` produce exactamente eso).
- *  3. **Lista de instaladas** — lo ya copiado en filesDir/exec: un toque
- *     lo ejecuta, un toque largo lo borra. Se refresca en cada onResume.
+ * ICONO Y NOMBRE desde la compilación: los binarios pueden llevar un
+ * footer ARCAAPP1 (scripts/empaqueta_app.py lo agrega al compilar con
+ * `--name` e `--icono`): [nombre u16-len][PNG u32-len][b"ARCAAPP1"] al
+ * final del ELF (el loader ignora los bytes tras el último segmento, así
+ * que sigue siendo ejecutable tal cual). Sin footer: avatar con la inicial.
  *
  * Sin permisos: SAF solo lee el URI que el usuario eligió.
  */
 class MainActivity : Activity() {
 
-    private lateinit var listContainer: LinearLayout
+    private lateinit var grid: GridLayout
+
+    /** App instalada lista para pintar en el grid. */
+    private data class AppInstalada(val bin: File, val nombre: String, val icono: Bitmap)
 
     private companion object {
         private const val TAG = "ArcaProbe"
         private const val REQ_ABRIR = 42
         private const val DIR_EXEC = "exec"
         private const val MAX_NOMBRE = 64
+        // espejo de scripts/empaqueta_app.py (footer ARCAAPP1)
+        private val MAGIC = "ARCAAPP1".toByteArray(Charsets.US_ASCII)
+        private const val MAX_ICONO_B = 256 * 1024
+        private const val MAX_NOMBRE_META = 96
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val pad = dp(16)
-        val title = TextView(this).apply {
-            text = getString(R.string.home_title)
-            textSize = 28f
+
+        val titulo = TextView(this).apply {
+            text = getString(R.string.apps_title)
+            textSize = 20f
             setTextColor(0xFFE8EAF0.toInt())
-            setPadding(pad, pad, pad, 0)
-        }
-        val sub = TextView(this).apply {
-            text = getString(R.string.home_sub)
-            textSize = 12f
-            setTextColor(0xFF9AA3B5.toInt())
-            setPadding(pad, dp(4), pad, pad)
-        }
-        val btnDemo = Button(this).apply {
-            text = getString(R.string.btn_run_demo)
-            setOnClickListener {
-                startActivity(Intent(this@MainActivity, DemoActivity::class.java))
-            }
-        }
-        val btnAbrir = Button(this).apply {
-            text = getString(R.string.btn_open)
-            setOnClickListener { abrirDesdeAlmacenamiento() }
-        }
-        val header = TextView(this).apply {
-            text = getString(R.string.installed_header)
-            textSize = 12f
-            typeface = Typeface.MONOSPACE
-            setTextColor(0xFF9AA3B5.toInt())
-            setPadding(pad, pad, pad, dp(4))
-        }
-        listContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, 0, pad, pad)
+            setPadding(pad, pad, pad, dp(6))
         }
 
-        val scroller = ScrollView(this).apply { addView(listContainer) }
-        val root = LinearLayout(this).apply {
+        grid = GridLayout(this).apply {
+            columnCount = if (resources.displayMetrics.widthPixels >= dp(600)) 4 else 3
+            setPadding(pad, dp(4), pad, dp(96))   // fondo: no quedar bajo el FAB
+        }
+        val scroller = ScrollView(this).apply { addView(grid) }
+
+        val contenido = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF101318.toInt())
-            addView(title)
-            addView(sub)
-            addView(btnDemo)
-            addView(btnAbrir)
-            addView(header)
+            addView(titulo)
             addView(
                 scroller,
                 LinearLayout.LayoutParams(
@@ -107,12 +94,254 @@ class MainActivity : Activity() {
                 )
             )
         }
+
+        // Botón flotante circular "+": el ÚNICO modo de añadir apps.
+        val fab = TextView(this).apply {
+            text = "+"
+            textSize = 30f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0xFF14B8A6.toInt())
+            }
+            elevation = dp(6).toFloat()
+            contentDescription = getString(R.string.fab_abrir)
+            setOnClickListener { abrirDesdeAlmacenamiento() }
+        }
+
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(0xFF101318.toInt())
+            addView(
+                contenido,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+            addView(
+                fab,
+                FrameLayout.LayoutParams(dp(56), dp(56), Gravity.BOTTOM or Gravity.END).apply {
+                    rightMargin = pad
+                    bottomMargin = pad
+                }
+            )
+        }
         setContentView(root)
     }
 
     override fun onResume() {
         super.onResume()
-        refrescarLista()
+        refrescarGrid()
+    }
+
+    // ───────────────── grid de instaladas ─────────────────
+
+    /** Lee filesDir/exec en un hilo propio (decodifica iconos) y pinta. */
+    private fun refrescarGrid() {
+        thread(name = "arca-lista") {
+            val dir = File(filesDir, DIR_EXEC)
+            val apps = dir.listFiles { f: File -> f.isFile }
+                ?.sortedBy { it.name.lowercase() }
+                ?.map { leerInstalada(it) }
+                ?: emptyList()
+            runOnUiThread { pintarGrid(apps) }
+        }
+    }
+
+    /** Resuelve nombre+icono de un binario (footer o fallback). */
+    private fun leerInstalada(bin: File): AppInstalada {
+        val meta = leerFooter(bin)
+        val nombre = meta?.first?.takeIf { it.isNotBlank() }
+            ?: bin.name.substringBeforeLast('.')
+        return AppInstalada(bin, nombre, meta?.second ?: avatar(nombre))
+    }
+
+    /**
+     * Footer ARCAAPP1 (espejo de scripts/empaqueta_app.py):
+     * [nombre utf-8][u16 len][icono PNG][u32 len][magic 8] al final.
+     * Devuelve (nombre, icono) o null si no hay footer válido.
+     */
+    private fun leerFooter(bin: File): Pair<String, Bitmap?>? {
+        try {
+            RandomAccessFile(bin, "r").use { raf ->
+                val len = raf.length()
+                if (len < 14L) return null
+                val magic = ByteArray(8)
+                raf.seek(len - 8)
+                raf.readFully(magic)
+                if (!magic.contentEquals(MAGIC)) return null
+
+                raf.seek(len - 12)
+                val b4 = ByteArray(4)
+                raf.readFully(b4)
+                val iconoLen = u32le(b4)
+                if (iconoLen < 0 || iconoLen > MAX_ICONO_B) return null
+                val iconoStart = len - 12 - iconoLen
+                if (iconoStart < 2L) return null
+
+                raf.seek(iconoStart - 2)
+                val b2 = ByteArray(2)
+                raf.readFully(b2)
+                val nombreLen = (b2[0].toInt() and 0xFF) or
+                    ((b2[1].toInt() and 0xFF) shl 8)
+                if (nombreLen <= 0 || nombreLen > MAX_NOMBRE_META) return null
+
+                val nombreStart = iconoStart - 2 - nombreLen
+                if (nombreStart < 0) return null
+
+                raf.seek(nombreStart)
+                val nombreB = ByteArray(nombreLen)
+                raf.readFully(nombreB)
+                val nombre = String(nombreB, Charsets.UTF_8).trim()
+
+                var icono: Bitmap? = null
+                if (iconoLen > 0) {
+                    val iconoB = ByteArray(iconoLen.toInt())
+                    raf.seek(iconoStart)
+                    raf.readFully(iconoB)
+                    icono = decodificarIcono(iconoB)
+                }
+                return nombre to icono
+            }
+        } catch (_: Exception) {
+            return null   // footer corrupto: fallback del caller
+        }
+    }
+
+    private fun u32le(b: ByteArray): Long =
+        (b[0].toLong() and 0xFF) or
+            ((b[1].toLong() and 0xFF) shl 8) or
+            ((b[2].toLong() and 0xFF) shl 16) or
+            ((b[3].toLong() and 0xFF) shl 24)
+
+    /** PNG→Bitmap con muestreo acotado (un icono malvado no tumba al lanzador). */
+    private fun decodificarIcono(bytes: ByteArray): Bitmap? {
+        if (bytes.size < 8 || bytes[0] != 0x89.toByte() || bytes[1] != 'P'.code.toByte()) {
+            return null
+        }
+        val sondear = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, sondear)
+        if (sondear.outWidth <= 0 || sondear.outHeight <= 0) return null
+        var sample = 1
+        while (sondear.outWidth / (sample * 2) >= 128 &&
+            sondear.outHeight / (sample * 2) >= 128
+        ) {
+            sample *= 2
+        }
+        val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+        return try {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Avatar de respaldo: círculo teal con la inicial del nombre. */
+    private fun avatar(nombre: String): Bitmap {
+        val sz = 96
+        val bmp = Bitmap.createBitmap(sz, sz, Bitmap.Config.ARGB_8888)
+        val cv = Canvas(bmp)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFF0F766E.toInt()
+            cv.drawCircle(sz / 2f, sz / 2f, sz / 2f, this)
+            color = Color.WHITE
+            textSize = 52f
+            textAlign = Paint.Align.CENTER
+            isFakeBoldText = true
+        }
+        val letra = nombre.trim().firstOrNull { it.isLetterOrDigit() }
+            ?.uppercaseChar()?.toString() ?: "?"
+        val y = sz / 2f - (p.ascent() + p.descent()) / 2f
+        cv.drawText(letra, sz / 2f, y, p)
+        return bmp
+    }
+
+    /** Pinta el grid (hilo UI): celdas icono+nombre o el estado vacío. */
+    private fun pintarGrid(apps: List<AppInstalada>) {
+        grid.removeAllViews()
+        if (apps.isEmpty()) {
+            val vacio = TextView(this).apply {
+                text = getString(R.string.apps_empty)
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF6B7385.toInt())
+                setPadding(0, dp(48), 0, dp(48))
+            }
+            val lp = GridLayout.LayoutParams(
+                GridLayout.spec(GridLayout.UNDEFINED, 1, 1f),
+                GridLayout.spec(GridLayout.UNDEFINED)
+            )
+            lp.width = 0
+            vacio.layoutParams = lp
+            grid.addView(vacio)
+            return
+        }
+        for (app in apps) {
+            grid.addView(celda(app))
+        }
+    }
+
+    /** Celda del grid: icono 56dp + nombre (2 líneas máx). */
+    private fun celda(app: AppInstalada): View {
+        val icono = ImageView(this).apply {
+            setImageBitmap(app.icono)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = false
+        }
+        val nombre = TextView(this).apply {
+            text = app.nombre
+            textSize = 11f
+            gravity = Gravity.CENTER
+            maxLines = 2
+            setTextColor(0xFFC7CDDA.toInt())
+            setPadding(0, dp(6), 0, 0)
+        }
+        val celda = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(6), dp(12), dp(6), dp(12))
+            isClickable = true
+            isFocusable = true
+            // feedback táctil del tema (sin AndroidX)
+            val tv = TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackground, tv, true)
+            if (tv.resourceId != 0) setBackgroundResource(tv.resourceId)
+            setOnClickListener { lanzar(app.bin) }
+            setOnLongClickListener { confirmarBorrado(app.bin, app.nombre); true }
+            addView(icono, LinearLayout.LayoutParams(dp(56), dp(56)))
+            addView(
+                nombre,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+        }
+        val lp = GridLayout.LayoutParams(
+            GridLayout.spec(GridLayout.UNDEFINED, 1, 1f),
+            GridLayout.spec(GridLayout.UNDEFINED)
+        )
+        lp.width = 0
+        celda.layoutParams = lp
+        return celda
+    }
+
+    private fun confirmarBorrado(bin: File, nombre: String) {
+        AlertDialog.Builder(this)
+            .setMessage(getString(R.string.confirm_delete, nombre))
+            .setPositiveButton(android.R.string.yes) { _, _ ->
+                val ok = bin.delete()
+                toast(
+                    getString(
+                        if (ok) R.string.toast_deleted else R.string.toast_delete_fail,
+                        nombre
+                    )
+                )
+                refrescarGrid()
+            }
+            .setNegativeButton(android.R.string.no, null)
+            .show()
     }
 
     // ───────────────── abrir binario desde el almacenamiento ─────────────────
@@ -153,8 +382,8 @@ class MainActivity : Activity() {
                 bin.outputStream().use { output -> input.copyTo(output, 64 * 1024) }
             } ?: throw IOException("contentResolver no pudo abrir $uri")
 
-            // rwx: sin el bit +x, execve() falla con EACCES aunque SELinux
-            // lo permita (misma razón que el installBinary del probe F0).
+            // rwx: sin el bit +x, execve() falla con EACCES (misma razón
+            // que el installBinary del probe F0).
             val ok = bin.setReadable(true, false) &&
                 bin.setWritable(true, false) &&
                 bin.setExecutable(true, false)
@@ -195,53 +424,6 @@ class MainActivity : Activity() {
         }
         runOnUiThread { startActivity(intent) }
     }
-
-    // ───────────────── lista de instaladas ─────────────────
-
-    private fun refrescarLista() {
-        listContainer.removeAllViews()
-        val dir = File(filesDir, DIR_EXEC)
-        val bins = dir.listFiles { f: File -> f.isFile }
-            ?.sortedBy { it.name.lowercase() }
-            ?: emptyList()
-
-        if (bins.isEmpty()) {
-            listContainer.addView(TextView(this).apply {
-                text = getString(R.string.installed_empty)
-                textSize = 12f
-                typeface = Typeface.MONOSPACE
-                setTextColor(0xFF6B7385.toInt())
-            })
-            return
-        }
-
-        for (bin in bins) {
-            val row = Button(this).apply {
-                text = getString(R.string.installed_row, bin.name, kb(bin.length()))
-                isAllCaps = false
-                gravity = Gravity.START or Gravity.CENTER_VERTICAL
-                setOnClickListener { lanzar(bin) }
-                setOnLongClickListener { confirmarBorrado(bin); true }
-            }
-            listContainer.addView(row)
-        }
-    }
-
-    private fun confirmarBorrado(bin: File) {
-        AlertDialog.Builder(this)
-            .setMessage(getString(R.string.confirm_delete, bin.name))
-            .setPositiveButton(android.R.string.yes) { _, _ ->
-                val ok = bin.delete()
-                toast(getString(if (ok) R.string.toast_deleted else R.string.toast_delete_fail, bin.name))
-                refrescarLista()
-            }
-            .setNegativeButton(android.R.string.no, null)
-            .show()
-    }
-
-    private fun kb(bytes: Long): String =
-        if (bytes >= 1024 * 1024) "%.1f MB".format(bytes / 1024.0 / 1024.0)
-        else "%d KB".format(bytes / 1024)
 
     private fun toast(msg: String) {
         runOnUiThread {

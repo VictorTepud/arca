@@ -12,7 +12,6 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -31,29 +30,28 @@ import kotlin.concurrent.thread
 /**
  * Probe visual F3a — el "display server" de juguete del proyecto.
  *
- * r10: VISOR A PANTALLA COMPLETA. Sin barra de estado propia, sin botón
- * "Detener", sin TextView de detalles: el SurfaceView es TODO lo que se
- * ve. El cierre vive DENTRO de la sub-app (botón X en su esquina
- * superior derecha): cuando el hijo sale, esta actividad se cierra
- * (finish) y vuelve al home (MainActivity).
+ * r11: SIN inmersiva. La barra de notificaciones queda VISIBLE (pedido
+ * explícito del usuario tras r10) y el framebuffer se dimensiona con la
+ * superficie REAL del SurfaceView — que el window ya recorta bajo la
+ * status bar: geometría correcta "restando la barra" de verdad, no con
+ * displayMetrics de pantalla completa (que era la causa del pixelado y
+ * del texto en miniatura de r10).
  *
- * Además puede lanzar CUALQUIER binario devapp (no solo el demo del APK):
- * MainActivity lo copia a filesDir/exec con chmod y lo pasa en el extra
- * [EXTRA_BIN]. El contrato es el mismo: env ARCA_FB/ARCA_FB_W/H, frames
- * JSON en stdout, touch JSON en stdin.
+ * El binario a lanzar llega SIEMPRE en el extra [EXTRA_BIN] (el lanzador
+ * MainActivity lo copia a filesDir/exec con chmod; la demo incorporada del
+ * APK se retiró en r11 — el usuario ya carga sus binarios con el botón +).
  *
  * Flujo (idéntico al diagrama graphs/gfx-f3a.mmd):
- *  1. Calcula el tamaño del framebuffer (pantalla escalada, lado mayor
- *     ≤ 1440 px — r10: era 720 y el pixelado "retro" molestaba; 2.25×
- *     píxeles + bilinear del blit) y crea `filesDir/arca-fb.bin` con la
- *     geometría EXACTA del double-buffer seqlock de arca-shm.
+ *  1. surfaceChanged entrega el tamaño real de la vista → fb (lado ≤
+ *     MAX_LADO, pares) → `filesDir/arca-fb.bin` con la geometría EXACTA
+ *     del double-buffer seqlock de arca-shm.
  *  2. Mapea el archivo RW (MAP_SHARED — coherente con el mmap del hijo).
- *  3. Resuelve el binario (extra o asset del APK, chmod 700) y lo lanza
- *     con fork+exec: mismo UID, mismo sandbox.
+ *  3. Lanza el binario con fork+exec: mismo UID, mismo sandbox.
  *  4. Hilo lector de stdout: `{"event":"frame"}` → lee el frame más novo
  *     con el protocolo seqlock y lo blitea al SurfaceView (bilinear).
  *  5. Touch → stdin del hijo como JSON (pantalla→píxeles del fb).
- *  6. El hijo muere (X, watchdog o señal) → log + finish() → home.
+ *  6. El hijo muere (X de la sub-app, watchdog o señal) → log + finish()
+ *     → vuelve al lanzador.
  *
  * Layout del payload de cada slot (espejo de arca-gfx-protocol):
  *  0..4 "AFRM" · 4 version(=1) · 5 formato(1=RGBA) · 7 flags ·
@@ -64,7 +62,7 @@ class DemoActivity : Activity() {
 
     private lateinit var surfaceView: SurfaceView
 
-    // Binario a lanzar: null = el demo incorporado (asset del APK).
+    // Binario a lanzar (obligatorio desde r11: sin demo incorporada).
     private var binPath: String? = null
 
     // Estado del proceso hijo (solo toca el hilo "arca-demo").
@@ -88,12 +86,15 @@ class DemoActivity : Activity() {
 
     @Volatile private var surfaceReady = false
     @Volatile private var running = false
+
+    // r11: arranque diferido al primer surfaceChanged (solo hilo UI).
+    private var started = false
+
     private var framesBlit = 0L
     private var framesSeen = 0L
 
     private companion object {
         private const val TAG = "ArcaProbe"
-        private const val ASSET = "devapp-demo"
         private const val EXTRA_BIN = "bin"
         private const val FB_NAME = "arca-fb.bin"
         private const val SLOT_HDR = 16        // arca-shm: seq u64 + pad 8
@@ -103,23 +104,24 @@ class DemoActivity : Activity() {
         // frames con un exit 0 tan limpio que parecía crash).
         private const val WATCHDOG_S = 900L
         private const val GRACE_S = 3L
-        // r10: 720 → 1440. En un 1080×2340 el fb pasa de 336×720 a
-        // ~664×1440 (4× píxeles): el bilinear del drawBitmap ya no
-        // amplía 3.2× sino ~1.6× y el pixelado retro desaparece. La
-        // sub-app escala su UI ×ui (≈h/720) para no quedar diminuta.
-        // El costo (render CPU + bucle RGBA→ARGB de Kotlin) sigue de
-        // sobra dentro del presupuesto de 33 ms/frame en el teléfono.
-        private const val MAX_LADO = 1440      // presupuesto de blit
+        // r11: el fb sale de la SUPERFICIE REAL de la vista (que el window
+        // ya deja bajo la barra de notificaciones), no de displayMetrics
+        // de pantalla completa. En un FHD típico: vista ~1080×2220 → fb
+        // ~1049×2160 → el blit escala 1.03× (en r10 era 1.6×: pixelado).
+        // Cap para acotar el costo (render CPU del hijo + bucle RGBA→ARGB
+        // de Kotlin): en QHD limita a ~1.4×; si un teléfono no llega a
+        // 30 fps con fb 2160, BAJA esta constante.
+        private const val MAX_LADO = 2160      // presupuesto de blit
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // r9: sin esto el timeout de pantalla apaga el SurfaceView a mitad
-        // de la demo y EMUI puede matar el proceso en segundo plano.
+        // de la sesión y EMUI puede matar el proceso en segundo plano.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        // r10: visor a pantalla completa (el tema ya es NoActionBar.Fullscreen;
-        // esto esconde también status+nav de forma inmersiva sticky).
-        applyImmersive()
+        // r11: SIN applyImmersive: el usuario pidió MANTENER la barra de
+        // notificaciones; el tema Theme.ArcaView ya no es Fullscreen y el
+        // contenido se recorta bajo la status bar automáticamente.
 
         binPath = intent.getStringExtra(EXTRA_BIN)
 
@@ -129,8 +131,17 @@ class DemoActivity : Activity() {
                     surfaceReady = true
                 }
 
+                // r11: AQUÍ llega la geometría verdadera (pantalla menos
+                // status bar). El primer evento dimensiona el fb y arranca
+                // al hijo; los siguientes solo re-centran el blit.
                 override fun surfaceChanged(h: SurfaceHolder, format: Int, w: Int, h2: Int) {
                     computeDstRect(w, h2)
+                    if (!started && w > 0 && h2 > 0) {
+                        started = true
+                        dimensionarFb(w, h2)
+                        running = true
+                        thread(name = "arca-demo") { runDemo() }
+                    }
                 }
 
                 override fun surfaceDestroyed(h: SurfaceHolder) {
@@ -151,43 +162,12 @@ class DemoActivity : Activity() {
         setContentView(root)
     }
 
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) applyImmersive()
-    }
-
-    /** Inmersivo sticky: sin status bar ni nav bar encima del demo. */
-    private fun applyImmersive() {
-        @Suppress("DEPRECATION") // minSdk 26 sin AndroidX: la vía clásica
-        window.decorView.systemUiVisibility =
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (!running) {
-            running = true
-            thread(name = "arca-demo") { runDemo() }
-        }
-    }
-
-    override fun onDestroy() {
-        running = false
-        stopChild("activity destruida")
-        super.onDestroy()
-    }
-
     // ───────────────────── ciclo del visor ─────────────────────
 
     private fun runDemo() {
         try {
             setupFramebuffer()
-            val bin = resolveBinary()
+            val bin = resolveBinary() ?: return   // ya avisó con toast
             Log.i(TAG, "lanzando: ${bin.absolutePath} (fb ${fbW}x${fbH})")
 
             val pb = ProcessBuilder(bin.absolutePath)
@@ -208,11 +188,11 @@ class DemoActivity : Activity() {
 
             thread(name = "arca-demo-stdout") { pumpStdout(p) }
 
-            // Watchdog de seguridad (15 min: margen para enseñar la demo;
-            // sigue acotando un hijo colgado).
+            // Watchdog de seguridad (15 min: margen de sobra para usar la
+            // sub-app; sigue acotando un hijo colgado).
             val finished = p.waitFor(WATCHDOG_S, TimeUnit.SECONDS)
             if (!finished) {
-                Log.i(TAG, "demo watchdog: destroy() → SIGTERM")
+                Log.i(TAG, "watchdog: destroy() → SIGTERM")
                 p.destroy()
                 if (!p.waitFor(GRACE_S, TimeUnit.SECONDS)) {
                     p.destroyForcibly()
@@ -220,58 +200,65 @@ class DemoActivity : Activity() {
                 }
             }
             val code = p.exitValue()
-            Log.i(TAG, "demo exit code = $code (blits: $framesBlit/${framesSeen} frames)")
+            Log.i(TAG, "exit code = $code (blits: $framesBlit/${framesSeen} frames)")
         } catch (t: Throwable) {
             Log.e(TAG, "demo FAILED", t)
         } finally {
             running = false
-            // r10: el hijo terminó (X de la sub-app, shutdown del host o
-            // watchdog) → cerrar el visor y volver al home. Si la activity
-            // ya se está cerrando (onDestroy), no hacemos nada.
+            // El hijo terminó (X de la sub-app, shutdown del host o
+            // watchdog) → cerrar el visor y volver al lanzador. Si la
+            // activity ya se está cerrando (onDestroy), no hacemos nada.
             runOnUiThread { if (!isFinishing) finish() }
         }
     }
 
     /**
-     * Binario a ejecutar: el del extra (abierto desde el almacenamiento y
-     * copiado por MainActivity a filesDir/exec) o, por defecto, el demo
-     * incorporado del APK.
+     * Binario a ejecutar: SOLO el del extra [EXTRA_BIN] (r11: la demo
+     * incorporada se retiró — todo pasa por el lanzador o ./arca.sh run).
+     * Devuelve null (con toast) si falta o es inaccesible.
      */
-    private fun resolveBinary(): File {
+    private fun resolveBinary(): File? {
         val extra = binPath
-        if (!extra.isNullOrBlank()) {
-            val f = File(extra)
-            if (f.isFile && f.canRead()) {
-                // defensivo: refresca el bit +x (la grieta targetSdk 28
-                // permite exec en /data/data, pero el bit de modo importa)
-                f.setExecutable(true, false)
-                Log.i(TAG, "binario externo: ${f.path} (${f.length()} B)")
-                return f
-            }
-            toast(getString(R.string.toast_no_binary, extra))
-            Log.e(TAG, "binario externo inaccesible: $extra")
+        if (extra.isNullOrBlank()) {
+            toast(getString(R.string.toast_no_binary))
+            Log.e(TAG, "sin extra 'bin' — ábrela desde el lanzador")
+            return null
         }
-        return installBinary()
+        val f = File(extra)
+        if (f.isFile && f.canRead()) {
+            // defensivo: refresca el bit +x (la grieta targetSdk 28
+            // permite exec en /data/data, pero el bit de modo importa)
+            f.setExecutable(true, false)
+            Log.i(TAG, "binario: ${f.path} (${f.length()} B)")
+            return f
+        }
+        toast(getString(R.string.toast_no_binary_file, extra))
+        Log.e(TAG, "binario inaccesible: $extra")
+        return null
     }
 
-    /** Dimensiona y crea el archivo de región + su mapeo (rol HOST). */
-    private fun setupFramebuffer() {
-        // Tamaño del framebuffer: pantalla escalada, lado mayor ≤ MAX_LADO,
-        // pares (u16 friendly).
-        val dm = resources.displayMetrics
-        val sw = dm.widthPixels.coerceAtLeast(1)
-        val sh = dm.heightPixels.coerceAtLeast(1)
+    /**
+     * r11: dimensiona el fb desde la SUPERFICIE real de la vista (que ya
+     * excluye la status bar), con tope MAX_LADO en el lado mayor y valores
+     * pares (u16 friendly del protocolo).
+     */
+    private fun dimensionarFb(sw: Int, sh: Int) {
         val scale = minOf(1f, MAX_LADO.toFloat() / maxOf(sw, sh))
         fbW = ((sw * scale).toInt() / 2 * 2).coerceAtLeast(2)
         fbH = ((sh * scale).toInt() / 2 * 2).coerceAtLeast(2)
+        Log.i(TAG, "vista ${sw}x${sh} → fb ${fbW}x${fbH} (escala de blit " +
+            "%.3f)".format(maxOf(sw.toFloat() / fbW, sh.toFloat() / fbH)))
+    }
 
+    /** Crea el archivo de región + su mapeo (rol HOST). */
+    private fun setupFramebuffer() {
         frameBytes = HDR + fbW * fbH * 4
         slotStride = SLOT_HDR + frameBytes
         val regionLen = SLOTS * slotStride
 
         val f = File(filesDir, FB_NAME)
         if (f.exists() && !f.delete()) {
-            throw IOException("no pude borrar ${f.path} (¿demo anterior vivo?)")
+            throw IOException("no pude borrar ${f.path} (¿sesión anterior viva?)")
         }
         val raf = RandomAccessFile(f, "rw")
         raf.setLength(regionLen.toLong())   // cero ⇒ seq par ⇒ sin frame
@@ -288,30 +275,6 @@ class DemoActivity : Activity() {
 
     private fun fbPath(): File = File(filesDir, FB_NAME)
 
-    /** Extrae el binario del APK a filesDir con chmod 700 (patrón F0). */
-    private fun installBinary(): File {
-        val bin = File(filesDir, ASSET)
-        if (bin.exists() && !bin.delete()) {
-            throw IOException("no pude borrar ${bin.path}")
-        }
-        try {
-            assets.open(ASSET).use { input ->
-                bin.outputStream().use { output -> input.copyTo(output, 64 * 1024) }
-            }
-        } catch (e: IOException) {
-            throw IOException(
-                "asset '$ASSET' no encontrado — corre ./arca.sh build (copió devapp-demo a assets/)",
-                e
-            )
-        }
-        val ok = bin.setReadable(true, false) &&
-            bin.setWritable(true, false) &&
-            bin.setExecutable(true, false)
-        if (!ok) throw IOException("chmod 700 falló sobre ${bin.path}")
-        Log.i(TAG, "instalado: ${bin.path} (${bin.length()} B)")
-        return bin
-    }
-
     /** Lector de stdout del hijo: eventos → logcat + blit. */
     private fun pumpStdout(p: Process) {
         try {
@@ -322,7 +285,7 @@ class DemoActivity : Activity() {
                 }
             }
         } catch (e: IOException) {
-            Log.w(TAG, "demo stdout: ${e.message}")
+            Log.w(TAG, "stdout: ${e.message}")
         }
     }
 
@@ -496,6 +459,12 @@ class DemoActivity : Activity() {
                 .also { it.name = "arca-demo-killer" }.start()
         } catch (_: Exception) {
         }
+    }
+
+    override fun onDestroy() {
+        running = false
+        stopChild("activity destruida")
+        super.onDestroy()
     }
 
     private fun toast(msg: String) {
