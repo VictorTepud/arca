@@ -134,13 +134,26 @@ class DemoActivity : Activity() {
                 // r11: AQUÍ llega la geometría verdadera (pantalla menos
                 // status bar). El primer evento dimensiona el fb y arranca
                 // al hijo; los siguientes solo re-centran el blit.
+                //
+                // r12: ORDEN CRÍTICO — computeDstRect DESPUÉS de
+                // dimensionarFb. En r11 se llamaba antes: con fb 0×0 el
+                // guard de computeDstRect saltaba y dstRect quedaba
+                // (0,0,0,0) PARA SIEMPRE → drawBitmap a un rect vacío no
+                // pinta NADA → pantalla negra con todos los logs sanos
+                // (hello, 30 fps, blits contando). detectado en hardware
+                // por el usuario; el harness qemu no puede verlo porque
+                // prueba al hijo, no la lógica del host.
                 override fun surfaceChanged(h: SurfaceHolder, format: Int, w: Int, h2: Int) {
-                    computeDstRect(w, h2)
                     if (!started && w > 0 && h2 > 0) {
                         started = true
                         dimensionarFb(w, h2)
+                        computeDstRect(w, h2)   // ya con fbW/fbH reales
                         running = true
                         thread(name = "arca-demo") { runDemo() }
+                    } else {
+                        // cambios posteriores (rotación, relayout):
+                        // re-centrar el blit con la geometría nueva.
+                        computeDstRect(w, h2)
                     }
                 }
 
@@ -331,6 +344,14 @@ class DemoActivity : Activity() {
     private fun blit() {
         val map = fbMap ?: return
         val bmp = bitmap ?: return
+        // r12: autodefensa — si por la razón que fuera el rect nunca se
+        // calculó (callback perdido), se reconstruye con la geometría
+        // REAL del holder en vez de blitear a un rect vacío (negro).
+        if (dstRect.isEmpty) {
+            val sf = surfaceView.holder.surfaceFrame
+            computeDstRect(sf.width(), sf.height())
+            if (dstRect.isEmpty) return   // sin superficie útil todavía
+        }
         val payload = readLatest(map) ?: return   // sin frame nuevo válido
 
         // bitmap RGBA→ARGB ints (determinista, independiente del layout
@@ -418,6 +439,10 @@ class DemoActivity : Activity() {
             (sw - w) / 2, (sh - h) / 2,
             (sw - w) / 2 + w, (sh - h) / 2 + h
         )
+        // r12: tripa al logcat — si esto imprime un rect vacío el blit
+        // no va a pintar nada (la pantalla negra de r11 se veía aquí
+        // al instante: "blit dst=Rect(0, 0 - 0, 0)").
+        Log.i(TAG, "blit dst=$dstRect (fb ${fbW}x${fbH} en vista ${sw}x${sh})")
     }
 
     // ───────────────────── touch → stdin del hijo ─────────────────────

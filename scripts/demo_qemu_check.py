@@ -307,10 +307,38 @@ def main() -> int:
         print("  [info] F: pocos frames bajo qemu para stats; se salta")
     d.close()
 
+    # H) geometría REAL del Huawei del usuario (HD+ 720×1600 menos barra
+    # → superficie 720×1536, fb 1:1, ui=3). Añadida en r12 tras el bug de
+    # la pantalla negra: esta geometría NUNCA se había probado (era la
+    # brecha entre C y F). Además del protocolo, CONTENIDO: una fila del
+    # panel de video debe tener barras cromáticas (el fondo de diseño es
+    # oscuro; un fb todo negro salta aquí).
+    d = run_demo_for(check, qemu, bin, 720, 1536, 14, "H(720x1536)")
+    if len(d.events("frame")) >= 120:
+        check_stats(check, d, "H")
+    else:
+        print("  [info] H: pocos frames bajo qemu para stats; se salta")
+    # panel de video (ui=3): x 36..684, y 528..888 — fila central
+    viva = 0
+    muestras = 0
+    for px in range(48, 672, 12):
+        r, g, b, a = d.fb_pixel(px, 708)
+        muestras += 1
+        if a == 255 and (r + g + b) > 90:
+            viva += 1
+    check.that(
+        viva >= 10,
+        f"H(720x1536): panel de video con barras cromáticas "
+        f"({viva}/{muestras} píxeles vivos)",
+    )
+    d.close()
+
     # D) el botón X (ui=1)  E) el botón X (ui=3)  G) la X en el fb 1:1 (ui=4)
+    # I) la X en la geometría REAL del Huawei (720×1536, ui=3)
     run_x_button(check, qemu, bin, 336, 720, "D(336x720)")
     run_x_button(check, qemu, bin, 666, 1440, "E(666x1440)")
     run_x_button(check, qemu, bin, 1049, 2160, "G(1049x2160)", maduracion=10.0)
+    run_x_button(check, qemu, bin, 720, 1536, "I(720x1536)", maduracion=8.0)
 
     total = check.ok + check.fail
     print(f"\n{check.ok}/{total} comprobaciones OK")
