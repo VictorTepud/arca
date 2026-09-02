@@ -8,7 +8,7 @@
     <string name="btn_demo">Demo UI (F3a: botones, imagen, video)</string>
     <string name="demo_status_idle">Demo F3a · arrancando…</string>
     <string name="demo_status_running">Demo corriendo · framebuffer %1$d×%2$d (toca la pantalla)</string>
-    <string name="demo_status_watchdog">Watchdog 180 s → SIGTERM</string>
+    <string name="demo_status_watchdog">Watchdog 900 s → SIGTERM</string>
     <string name="demo_status_exited">demo exit code = %1$d · blits: %2$d</string>
     <string name="demo_btn_stop">Detener demo (SIGTERM)</string>
 </resources>

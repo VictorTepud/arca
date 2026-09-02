@@ -12,6 +12,7 @@ import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -87,13 +88,22 @@ class DemoActivity : Activity() {
         private const val SLOT_HDR = 16        // arca-shm: seq u64 + pad 8
         private const val SLOTS = 2            // double-buffer
         private const val HDR = 32             // arca-gfx-protocol
-        private const val WATCHDOG_S = 180L
+        // r9: con 180 s el watchdog cortaba la demo a los ~5401 frames
+        // (30 fps × 180 s + 1 en vuelo) con un exit 0 tan limpio que parecía
+        // crash "normal". 15 min: margen de sobra para enseñar la demo y
+        // sigue acotando un hijo colgado (el botón Detener sigue ahí).
+        private const val WATCHDOG_S = 900L
         private const val GRACE_S = 3L
         private const val MAX_LADO = 720       // presupuesto de blit
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // r9: sin esto el timeout de pantalla apaga el SurfaceView a mitad
+        // de la demo (blits congelados) y EMUI puede matar el proceso al
+        // pasar a segundo plano. Es un probe: mantener la pantalla viva
+        // mientras la actividad esté delante es el comportamiento correcto.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         statusView = TextView(this).apply {
             text = getString(R.string.demo_status_idle)
@@ -275,8 +285,12 @@ class DemoActivity : Activity() {
         when (json.optString("event")) {
             "frame" -> {
                 framesSeen++
-                // pacing: 1 de cada 60 frames al logcat (evita spam)
-                if (framesSeen % 60 == 1L) {
+                // pacing: 1 de cada 61 frames al logcat (evita spam). 61 es
+                // COPRIMO con los 2 slots del double-buffer → el slot
+                // logueado ALTERNa 0/1/0/1 y el logcat DEMUESTRA la rotación
+                // (con 60, par, siempre caía el mismo slot y “parecía” que
+                // el hijo no rotaba — aliasing de muestreo, no bug).
+                if (framesSeen % 61 == 1L) {
                     Log.i(TAG, "frame seq=${json.optLong("seq")} slot=${json.optInt("slot")}")
                 }
                 if (surfaceReady) blit()

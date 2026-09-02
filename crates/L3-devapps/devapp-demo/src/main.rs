@@ -93,6 +93,9 @@ struct Demo {
     exit: Option<&'static str>,
     /// Fase animada del panel de "video" (ms acumulados del panel).
     vid_t: u32,
+    /// FPS MEDIDO del último stats (arranca en el teórico; r9: antes la
+    /// pantalla mostraba el teórico fijo — el medido es telemetría honesta).
+    last_fps: u32,
     ball: Ball,
 }
 
@@ -110,6 +113,7 @@ impl Demo {
             pressed: [false, false, false],
             exit: None,
             vid_t: 0,
+            last_fps: (1000 / FRAME_MS) as u32,
             ball: Ball {
                 x: w as f32 * 0.5,
                 y: h as f32 * 0.45,
@@ -381,7 +385,7 @@ impl Demo {
             (None, Some(r)) => format!("saliendo: {r}"),
             (None, None) => "sin toque".to_string(),
         };
-        let fps = self.fps_actual();
+        let fps = self.last_fps;
         let linea = format!(
             "fps:{}  frames:{}  pings:{}  {}",
             fps, self.frames, self.pings, touch_txt
@@ -435,11 +439,6 @@ impl Demo {
         );
     }
 
-    /// FPS medido de los últimos STATS_CADA frames (aprox. entero).
-    fn fps_actual(&self) -> u32 {
-        // el reloj del demo avanza a FRAME_MS por step: fps teórico
-        ((1000 / FRAME_MS) as u32).min(60)
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -480,6 +479,19 @@ fn format_buf(buf: &mut [u8; 12], v: u32) -> &str {
         }
     }
     core::str::from_utf8(&buf[i..]).unwrap_or("?")
+}
+
+/// FPS medido: (Δframes × 1000) / Δt en ms.
+///
+/// Regresión r9 (hallada en hardware): la fórmula anterior del bucle era
+/// `(STATS_CADA - stats_f0) * 1000 / dt` — a partir del 3.er intervalo
+/// `stats_f0` supera `STATS_CADA` y la resta en u64 hace UNDERFLOW (wrap a
+/// ~2^64) → el logcat del teléfono mostraba fps≈4.6e15. Con el delta REAL
+/// de frames y `saturating_mul` el resultado es siempre plausible; `dt_ms`
+/// se fuerza ≥ 1 (sin división por cero).
+#[must_use]
+fn fps_medida(delta_frames: u64, dt_ms: u64) -> u64 {
+    delta_frames.saturating_mul(1000) / dt_ms.max(1)
 }
 
 // ---------------------------------------------------------------------------
@@ -746,15 +758,26 @@ fn run() -> Result<(), String> {
                 demo.frames, slot
             ));
             slot ^= 1;
-            next = now + FRAME_MS;
-            if now > next + 200 {
-                next = now + FRAME_MS; // nos atrasamos mucho: resincroniza
+            // Cadencia anclada al calendario (`next += FRAME_MS`), no a `now`:
+            // un frame corto espera lo justo en el próximo tick, y si nos
+            // atrasamos >200 ms (equipo lento, depurador) resincronizamos
+            // en vez de arrastrar deuda ni disparar ráfagas de catch-up.
+            // (r9: la condición vieja comparaba `now` contra el `next`
+            // RECIÉN reescrito, así que esa rama era código muerto.)
+            if now.saturating_sub(next) > 200 {
+                next = now;
             }
+            next += FRAME_MS;
 
             // stats cada STATS_CADA frames
             if demo.frames % STATS_CADA == 0 {
+                // r9: delta de frames REAL. La fórmula vieja restaba la
+                // constante STATS_CADA de un contador acumulado → underflow
+                // de u64 → fps≈4.6e15 en el teléfono desde el 3.er intervalo.
+                let dfr = (demo.frames as u64).saturating_sub(stats_f0 as u64);
                 let dt = now.saturating_sub(stats_t0).max(1);
-                let fps = (STATS_CADA as u64 - stats_f0 as u64) * 1000 / dt;
+                let fps = fps_medida(dfr, dt);
+                demo.last_fps = u32::try_from(fps).unwrap_or(u32::MAX);
                 emit_line(&format!(
                     "{{\"event\":\"stats\",\"frames\":{},\"fps\":{}}}",
                     demo.frames, fps
@@ -929,5 +952,40 @@ fn selftest() -> i32 {
     } else {
         eprintln!("selftest: FALLÓ ({fallos} comprobaciones)");
         1
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests (regresión r9)
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::{fps_medida, STATS_CADA};
+
+    /// La aritmética del stats tal como la computa el bucle: `stats_f0`
+    /// acumula 120, 240, 360… — la fórmula VIEJA restaba
+    /// `STATS_CADA - stats_f0` en u64 y desde el 3.er intervalo wrap-eaba
+    /// (logcat del teléfono: fps≈4.6e15).
+    #[test]
+    fn stats_fps_no_hace_underflow() {
+        let mut stats_f0: u32 = 0;
+        for k in 1..=20u32 {
+            let frames = STATS_CADA * k;
+            let dfr = (frames as u64).saturating_sub(stats_f0 as u64);
+            let fps = fps_medida(dfr, 3960); // 120 frames × 33 ms
+            assert_eq!(fps, 30, "intervalo {k}");
+            stats_f0 = frames;
+        }
+    }
+
+    /// Bordes del helper: sin división por cero, saturación (no wrap).
+    #[test]
+    fn fps_medida_bordes() {
+        assert_eq!(fps_medida(120, 4000), 30);
+        assert_eq!(fps_medida(60, 2000), 30);
+        assert_eq!(fps_medida(0, 4000), 0);
+        assert_eq!(fps_medida(120, 0), 120_000); // dt degenerado
+        assert_eq!(fps_medida(u64::MAX, 1), u64::MAX); // satura, no wrap
     }
 }
