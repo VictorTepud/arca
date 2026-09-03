@@ -35,6 +35,16 @@ Contenedor de sub-apps Rust para Android. Blueprint: `../arca-blueprint/`.
   error/recuperación, historial; mismo protocolo del demo y footer
   ARCAAPP1 ("Calculadora" + icono). 27 tests + selftest + harness qemu
   17/17 (`scripts/calc_qemu_check.py`).
+- **r15 (worklog T27)**: `arca.sh` endurecido — `deps` ya no muere en
+  silencio: si `sdkmanager` falla, imprime las últimas líneas de
+  `.arca-tools/sdk-install.log` y sale con `[ERROR]` (en r14, `set -e`
+  abortaba ANTES del manejador y luego `build` reclamaba "no hay
+  Gradle" sin pista). Rechaza rutas con espacios o paréntesis (un ZIP
+  re-descargado como "arca-main (1)" rompe el toolchain de Android) con
+  el `mv` exacto para arreglarlo, da por buena solo una instalación
+  completa del SDK (platform-tools + android-34 + build-tools, no solo
+  adb) y las descompresiones (cmdline-tools/JDK/Gradle) también
+  reportan fallos.
 
 ## Uso rápido (PC/Deepin) — TODO EN UNO
 

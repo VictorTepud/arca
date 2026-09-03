@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  arca.sh — Arca F0-F3a (r14): TODO en un solo comando
+#  arca.sh — Arca F0-F3a (r15): TODO en un solo comando
 #
 #  Basado en el proyecto completo (26 crates) + probe visual F3a: devapp-demo
 #  pinta botones/imagen/animación en pantalla y responde al dedo
 #  (framebuffer compartido + stdio). r14 añade devapp-calc: la calculadora
-#  completa (decimal exacto, precedencia, %, signo).
+#  completa (decimal exacto, precedencia, %, signo). r15 endurece deps:
+#  si sdkmanager falla se ve el porqué (antes moría en silencio y "build"
+#  reclamaba que faltaba Gradle), rechaza rutas con espacios o paréntesis
+#  y repara instalaciones de SDK a medias.
 #
 #  r11: los binarios llevan footer ARCAAPP1 (nombre+icono, ver
 #  scripts/empaqueta_app.py) y `run` los sube al teléfono por run-as
@@ -44,6 +47,16 @@ info()  { printf "${C_B}[arca ]${C_0} %s\n" "$*"; }
 ok()    { printf "${C_G}[OK   ]${C_0} %s\n" "$*"; }
 warn()  { printf "${C_Y}[aviso]${C_0} %s\n" "$*"; }
 error() { printf "${C_R}[ERROR]${C_0} %s\n" "$*" >&2; exit 1; }
+
+# r15: las herramientas de Android (sdkmanager, aapt2, Gradle) fallan de
+# formas silenciosas y extrañas con rutas que traen espacios o paréntesis
+# — p.ej. un ZIP re-descargado como "arca-main (1)". Rechazo temprano y
+# claro en vez de depurar fantasmas dentro del toolchain.
+case "$REPO_ROOT" in
+    *" "*|*"("*|*")"*)
+        error "la ruta del proyecto trae espacios o paréntesis ($REPO_ROOT); las herramientas de Android fallan con rutas así. Muévela a una ruta simple y reintenta: mv '$REPO_ROOT' ~/arca && cd ~/arca && ./arca.sh deps"
+        ;;
+esac
 
 export PATH="$HOME/.cargo/bin:$PATH"
 
@@ -100,8 +113,8 @@ instalar_jdk() {
     local carpeta
     carpeta="$(tar -tzf "$tgz" | head -n1 | cut -d/ -f1)"
     rm -rf "$TOOLS/jdk" "$TOOLS/$carpeta"
-    tar -xzf "$tgz" -C "$TOOLS"
-    mv "$TOOLS/$carpeta" "$TOOLS/jdk"
+    tar -xzf "$tgz" -C "$TOOLS" || error "no pude descomprimir el JDK"
+    mv "$TOOLS/$carpeta" "$TOOLS/jdk" || error "no pude mover el JDK a .arca-tools/jdk"
 }
 
 instalar_sdk() {
@@ -115,25 +128,32 @@ instalar_sdk() {
     fi
     rm -rf "$TOOLS/ct-tmp"
     mkdir -p "$TOOLS/ct-tmp"
-    unzip -q "$zip" -d "$TOOLS/ct-tmp"
+    unzip -q "$zip" -d "$TOOLS/ct-tmp" || error "no pude descomprimir cmdline-tools"
     mkdir -p "$SDK/cmdline-tools"
     rm -rf "$SDK/cmdline-tools/latest"
-    mv "$TOOLS/ct-tmp/cmdline-tools" "$SDK/cmdline-tools/latest"
+    mv "$TOOLS/ct-tmp/cmdline-tools" "$SDK/cmdline-tools/latest" \
+        || error "no pude mover cmdline-tools dentro del SDK"
     rm -rf "$TOOLS/ct-tmp"
 
     local sm="$SDK/cmdline-tools/latest/bin/sdkmanager"
-    info "aceptando licencias..."
+    # pipefail OFF en todo este bloque: `yes` muere por SIGPIPE (141)
+    # cuando sdkmanager cierra stdin y, con pipefail, una instalación
+    # exitosa parecería fallida.
     set +o pipefail
+    info "aceptando licencias..."
     yes | "$sm" --sdk_root="$SDK" --licenses >/dev/null 2>&1 || true
     info "descargando platform-tools, android-34 y build-tools (un par de minutos)..."
-    yes | "$sm" --sdk_root="$SDK" "platform-tools" "platforms;android-34" \
-        "build-tools;34.0.0" >"$TOOLS/sdk-install.log" 2>&1
-    local rc=$?
-    set -o pipefail
-    if [ "$rc" -ne 0 ]; then
+    # r15: el `if !` es el corazón del fix. Con set -e, el pipeline sin
+    # guardar moría ANTES de entrar al manejador de error: deps terminaba
+    # en silencio (ni [OK] ni [ERROR]) y el "build" siguiente reclamaba
+    # "no hay Gradle" sin pista del fallo real del sdkmanager.
+    if ! yes | "$sm" --sdk_root="$SDK" "platform-tools" "platforms;android-34" \
+            "build-tools;34.0.0" >"$TOOLS/sdk-install.log" 2>&1; then
+        set -o pipefail
         tail -n 20 "$TOOLS/sdk-install.log" || true
-        error "no pude instalar los paquetes del SDK"
+        error "no pude instalar los paquetes del SDK (arriba están las últimas líneas de .arca-tools/sdk-install.log)"
     fi
+    set -o pipefail
 }
 
 instalar_gradle() {
@@ -145,7 +165,7 @@ instalar_gradle() {
             || error "no pude descargar Gradle"
     fi
     rm -rf "$GRADLE_HOME"
-    unzip -q "$zip" -d "$TOOLS"
+    unzip -q "$zip" -d "$TOOLS" || error "no pude descomprimir Gradle en .arca-tools/"
 }
 
 adb_requerido() {
@@ -194,7 +214,12 @@ cmd_deps() {
     resolver_java
     ok "Java: $(java -version 2>&1 | head -n1)"
 
-    if [ ! -x "$SDK/platform-tools/adb" ]; then
+    # r15: un deps interrumpido podía dejar el SDK a medias (solo
+    # platform-tools); checar solo adb daba por buena una instalación
+    # incompleta y el fallo aparecía mucho después, dentro de Gradle.
+    if [ ! -x "$SDK/platform-tools/adb" ] \
+        || [ ! -d "$SDK/platforms/android-34" ] \
+        || [ ! -d "$SDK/build-tools/34.0.0" ]; then
         instalar_sdk
     fi
     ok "SDK: $SDK"
@@ -419,7 +444,7 @@ cmd_limpiar() {
 
 uso() {
     cat <<'EOF'
-arca.sh — Arca F0-F3a (r14): construye, instala y corre el probe en tu Android
+arca.sh — Arca F0-F3a (r15): construye, instala y corre el probe en tu Android
 
   ./arca.sh todo             flujo completo: deps + test + build + install + run demo + logs
   ./arca.sh deps             instalar dependencias (Rust, JDK, Android SDK, Gradle)
