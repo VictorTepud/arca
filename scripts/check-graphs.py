@@ -26,6 +26,7 @@ LAYER = {
     "arca-tools-pk": 3, "arca-tools-dev": 3, "arca-bench": 3,
     "devapp-hello": 3, "devapp-demo": 3, "devapp-keyboard": 3,
     "devapp-crashy": 3, "devapp-net": 3, "arca-home": 3,
+    "devapp-calc": 3,
 }
 
 # Tabla maestra docs/08 §3 (deps Arca permitidas por crate)
@@ -60,6 +61,7 @@ ALLOWED = {
     "arca-tools-dev": ["arca-types", "arca-pkg-model", "arca-store", "arca-installer", "arca-sign", "arca-7z", "arca-log"],
     "arca-bench": ["arca-types", "arca-ipc", "arca-shm", "arca-gfx-host", "arca-exec-abi", "arca-protocol"],
     "devapp-hello": [], "devapp-demo": ["arca-gfx-protocol", "arca-shm", "arca-sdk-ui"],
+    "devapp-calc": ["arca-gfx-protocol", "arca-shm", "arca-sdk-ui"],
     "devapp-keyboard": [],
     "devapp-crashy": [], "devapp-net": [], "arca-home": [],
 }

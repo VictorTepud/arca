@@ -667,6 +667,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "devapp-calc"
+version = "0.1.0"
+dependencies = [
+ "arca-gfx-protocol",
+ "arca-sdk-ui",
+ "arca-shm",
+ "libc",
+]
+
+[[package]]
 name = "devapp-crashy"
 version = "0.1.0"
 

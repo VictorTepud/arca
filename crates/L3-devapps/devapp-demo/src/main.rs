@@ -1071,7 +1071,7 @@ fn selftest() -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Demo, fps_medida, ui_scale, x_hit, zona_x, STATS_CADA};
+    use super::{fps_medida, ui_scale, x_hit, zona_x, Demo, STATS_CADA};
 
     /// La aritmética del stats tal como la computa el bucle: `stats_f0`
     /// acumula 120, 240, 360… — la fórmula VIEJA restaba
@@ -1135,7 +1135,10 @@ mod tests {
             let (x0, y0, x1, y1) = d.zona_pelota();
             assert!(y0 >= 1.0 && y0 < y1, "({w}x{h}) zona vacía: {y0}..{y1}");
             assert!(x0 >= 0.0 && x1 > x0, "({w}x{h}) x degenerado: {x0}..{x1}");
-            assert!(x1 <= w as f32 && y1 <= h as f32, "({w}x{h}) fuera de canvas");
+            assert!(
+                x1 <= w as f32 && y1 <= h as f32,
+                "({w}x{h}) fuera de canvas"
+            );
             if bajo_panel {
                 let panel_fin = 308.0 * d.ui as f32;
                 assert!(

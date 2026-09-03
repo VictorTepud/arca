@@ -1,0 +1,20 @@
+[package]
+name = "devapp-calc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+description = "calculadora completa F3a: decimal exacto (i128), precedencia, % y signo (probe visual)"
+
+[[bin]]
+name = "devapp-calc"
+path = "src/main.rs"
+
+# NOTA(agent F3a): `libc` local con versión explícita, misma convención que
+# devapp-demo (el Cargo.toml raíz es intocable; 0.2.189 = cache local).
+[dependencies]
+arca-gfx-protocol = { path = "../../L0-arca-gfx-protocol" }
+arca-shm = { path = "../../L0-arca-shm" }
+arca-sdk-ui = { path = "../../L2-arca-sdk-ui" }
+libc = "0.2.189"

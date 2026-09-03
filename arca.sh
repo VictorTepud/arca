@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  arca.sh — Arca F0-F3a (r11): TODO en un solo comando
+#  arca.sh — Arca F0-F3a (r14): TODO en un solo comando
 #
 #  Basado en el proyecto completo (26 crates) + probe visual F3a: devapp-demo
 #  pinta botones/imagen/animación en pantalla y responde al dedo
-#  (framebuffer compartido + stdio).
+#  (framebuffer compartido + stdio). r14 añade devapp-calc: la calculadora
+#  completa (decimal exacto, precedencia, %, signo).
 #
 #  r11: los binarios llevan footer ARCAAPP1 (nombre+icono, ver
 #  scripts/empaqueta_app.py) y `run` los sube al teléfono por run-as
@@ -13,10 +14,10 @@
 #  Uso:
 #    ./arca.sh todo            # deps + test + build + install + run demo + logs
 #    ./arca.sh deps            # Rust + targets musl + JDK + SDK + Gradle (1.ª vez)
-#    ./arca.sh test            # 6 e2e del motor + selftest del demo EN TU PC
-#    ./arca.sh build           # devapp-hello + devapp-demo (arm64, SIN NDK) + footer + APK
+#    ./arca.sh test            # 6 e2e del motor + selftest de demo Y calc EN TU PC
+#    ./arca.sh build           # devapp-hello + demo + calc (arm64, SIN NDK) + footer + APK
 #    ./arca.sh install         # instala el APK (adb)
-#    ./arca.sh run [demo|home] # sube el demo por run-as y lo lanza / abre el lanzador
+#    ./arca.sh run [demo|calc|home] # sube y lanza demo/calc / abre el lanzador
 #    ./arca.sh logs            # guarda logs/arca-logs-*.txt (el archivo a enviar)
 #    ./arca.sh limpiar         # borra compilados (conserva dependencias)
 #
@@ -34,7 +35,9 @@ APK="$HOST_PROBE_DIR/app/build/outputs/apk/debug/app-debug.apk"
 PAQUETE="dev.arca.probe"
 BIN_ARM64="$REPO_ROOT/target/aarch64-unknown-linux-musl/release/devapp-hello"
 BIN_DEMO_ARM64="$REPO_ROOT/target/aarch64-unknown-linux-musl/release/devapp-demo"
+BIN_CALC_ARM64="$REPO_ROOT/target/aarch64-unknown-linux-musl/release/devapp-calc"
 ICONO_DEMO="$REPO_ROOT/crates/L3-devapps/devapp-demo/assets/icono.png"
+ICONO_CALC="$REPO_ROOT/crates/L3-devapps/devapp-calc/assets/icono.png"
 
 C_R='\033[0;31m'; C_G='\033[0;32m'; C_Y='\033[0;33m'; C_B='\033[0;34m'; C_0='\033[0m'
 info()  { printf "${C_B}[arca ]${C_0} %s\n" "$*"; }
@@ -221,6 +224,13 @@ cmd_test() {
     else
         error "falló el selftest del demo; cópiame la salida"
     fi
+    info "selftest de la calculadora (pipeline + escenarios del motor)..."
+    cargo build -p devapp-calc
+    if "$REPO_ROOT/target/debug/devapp-calc" --selftest; then
+        ok "calculadora verificada en tu PC"
+    else
+        error "falló el selftest de la calculadora; cópiame la salida"
+    fi
 }
 
 cmd_build() {
@@ -242,11 +252,13 @@ cmd_build() {
         chmod +x "$HOME/.cargo/bin/ld.lld"
     fi
 
-    info "compilando devapp-hello y devapp-demo para arm64 (estático-PIE, SIN NDK)..."
+    info "compilando devapp-hello, devapp-demo y devapp-calc para arm64 (estático-PIE, SIN NDK)..."
     cargo build -p devapp-hello --target aarch64-unknown-linux-musl --release \
         || error "falló el cross a aarch64 musl"
     cargo build -p devapp-demo --target aarch64-unknown-linux-musl --release \
         || error "falló el cross del demo a aarch64 musl"
+    cargo build -p devapp-calc --target aarch64-unknown-linux-musl --release \
+        || error "falló el cross de la calculadora a aarch64 musl"
 
     # gate de calidad: ELF estático-PIE verificado A NIVEL DE BYTES con
     # python3 (scripts/verifica_elf.py). El parseo textual de readelf+awk
@@ -255,12 +267,12 @@ cmd_build() {
     # dependencia de versión/locale/binutils del entorno.
     command -v python3 >/dev/null 2>&1 \
         || error "el gate necesita python3: sudo apt install python3"
-    for bin in "$BIN_ARM64" "$BIN_DEMO_ARM64"; do
+    for bin in "$BIN_ARM64" "$BIN_DEMO_ARM64" "$BIN_CALC_ARM64"; do
         [ -f "$bin" ] || error "no existe $bin (¿falló la compilación?)"
         python3 "$REPO_ROOT/scripts/verifica_elf.py" "$bin" \
             || error "$(basename "$bin") no pasó el gate estático-PIE (detalle arriba)"
     done
-    ok "devapp-hello y devapp-demo: ELF estático-PIE verificados (bytes)"
+    ok "devapp-hello, devapp-demo y devapp-calc: ELF estático-PIE verificados (bytes)"
 
     # r11: footer ARCAAPP1 — nombre + icono viajan DENTRO del binario; el
     # lanzador los lee para el grid (el loader de ELF ignora los bytes tras
@@ -272,6 +284,9 @@ cmd_build() {
     python3 "$REPO_ROOT/scripts/empaqueta_app.py" "$BIN_ARM64" \
         --name "Arca Hello" \
         || error "falló el empaquetado de hello"
+    python3 "$REPO_ROOT/scripts/empaqueta_app.py" "$BIN_CALC_ARM64" \
+        --name "Calculadora" --icono "$ICONO_CALC" \
+        || error "falló el empaquetado de la calculadora"
 
     info "construyendo el APK (la primera vez descarga dependencias de Gradle)..."
     export ANDROID_HOME="$SDK"
@@ -318,19 +333,31 @@ subir_binario() {
 cmd_run() {
     adb_requerido
     local modo="${1:-demo}"
-    if [ "$modo" = "home" ] || [ "$modo" = "hello" ]; then
-        "$ADB" shell am start -n "$PAQUETE/.MainActivity" >/dev/null \
-            || error "no pude lanzar el lanzador"
-        ok "lanzador abierto: grid de instaladas + botón + para añadir"
-    else
-        # r11: sin asset en el APK — el binario sube por run-as y se lanza
-        # con el extra "bin" (DemoActivity ya NO tiene demo incorporada).
-        subir_binario "$BIN_DEMO_ARM64" devapp-demo
-        "$ADB" shell am start -n "$PAQUETE/.DemoActivity" \
-            --es bin "/data/data/$PAQUETE/files/exec/devapp-demo" >/dev/null \
-            || error "no pude lanzar el demo (¿corriste ./arca.sh build?)"
-        ok "demo F3a lanzado: toca la pantalla del teléfono (botones y pelota)"
-    fi
+    case "$modo" in
+        home|hello)
+            "$ADB" shell am start -n "$PAQUETE/.MainActivity" >/dev/null \
+                || error "no pude lanzar el lanzador"
+            ok "lanzador abierto: grid de instaladas + botón + para añadir"
+            ;;
+        calc)
+            # r14: la calculadora sube igual que el demo (run-as) y vive
+            # en el grid del lanzador con su icono
+            subir_binario "$BIN_CALC_ARM64" devapp-calc
+            "$ADB" shell am start -n "$PAQUETE/.DemoActivity" \
+                --es bin "/data/data/$PAQUETE/files/exec/devapp-calc" >/dev/null \
+                || error "no pude lanzar la calculadora (¿corriste ./arca.sh build?)"
+            ok "calculadora lanzada: teclea una operación y toca ="
+            ;;
+        *)
+            # r11: sin asset en el APK — el binario sube por run-as y se lanza
+            # con el extra "bin" (DemoActivity ya NO tiene demo incorporada).
+            subir_binario "$BIN_DEMO_ARM64" devapp-demo
+            "$ADB" shell am start -n "$PAQUETE/.DemoActivity" \
+                --es bin "/data/data/$PAQUETE/files/exec/devapp-demo" >/dev/null \
+                || error "no pude lanzar el demo (¿corriste ./arca.sh build?)"
+            ok "demo F3a lanzado: toca la pantalla del teléfono (botones y pelota)"
+            ;;
+    esac
 }
 
 cmd_logs() {
@@ -392,14 +419,14 @@ cmd_limpiar() {
 
 uso() {
     cat <<'EOF'
-arca.sh — Arca F0-F3a (r11): construye, instala y corre el probe en tu Android
+arca.sh — Arca F0-F3a (r14): construye, instala y corre el probe en tu Android
 
   ./arca.sh todo             flujo completo: deps + test + build + install + run demo + logs
   ./arca.sh deps             instalar dependencias (Rust, JDK, Android SDK, Gradle)
-  ./arca.sh test             6 e2e del motor + selftest del demo en tu PC
+  ./arca.sh test             6 e2e del motor + selftest de demo y calc en tu PC
   ./arca.sh build            compilar devapps (arm64, sin NDK) + footer ARCAAPP1 + APK
   ./arca.sh install          instalar el APK en el teléfono (adb)
-  ./arca.sh run [demo|home]  subir el demo por run-as y lanzarlo (default) / abrir el lanzador
+  ./arca.sh run [demo|calc|home]  subir y lanzar demo/calc (default) / abrir el lanzador
   ./arca.sh logs             guardar los logs en logs/arca-logs-*.txt (para enviar)
   ./arca.sh limpiar          borrar compilados
 

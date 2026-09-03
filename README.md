@@ -11,6 +11,7 @@ Contenedor de sub-apps Rust para Android. Blueprint: `../arca-blueprint/`.
 | F1 (T03-T09) | ✔ | types, pkg-model, 7z, sign, store, installer, tools-pk — pipeline `.arca` completo |
 | F2 (T10-T16) | ✔ | **protocol, shm, ipc, exec-abi, permissions, exec-native, rt** — ejecución nativa headless con sandbox seccomp REAL |
 | **F3a (T18)** | ⏳ **pantalla viva** | `devapp-demo` + `DemoActivity`: botones/imagen/animación/touch vía framebuffer seqlock compartido |
+| **F3a (T26, r14)** | ⏳ **calculadora completa** | `devapp-calc`: decimal exacto (i128), precedencia, %, ± — primera sub-app "de verdad" del contenedor |
 
 - **358 tests verdes** · `clippy -D warnings` verde · grafo sin ciclos (`scripts/check-graphs.py`)
 - E2E del backend nativo (PC): spawn → handshake → **ping p99 = 22 µs** (presupuesto 1 ms) → kill-9 → Dead ≤ 50 ms; 100 spawns sin zombis; **seccomp probado** (socket() → SIGSYS); panic de app → exit 101.
@@ -29,6 +30,11 @@ Contenedor de sub-apps Rust para Android. Blueprint: `../arca-blueprint/`.
   `host-probe/DemoActivity` el display server de juguete (mmap MAP_SHARED
   + seqlock + blit a SurfaceView + touch→stdin). Decisión clave: blake3
   `pure` en targets musl para conservar el cross SIN NDK.
+- **r14 (worklog T26)**: `devapp-calc` — calculadora completa como
+  sub-app: motor decimal exacto (`0.1+0.2=0.3`), precedencia, %, ±,
+  error/recuperación, historial; mismo protocolo del demo y footer
+  ARCAAPP1 ("Calculadora" + icono). 27 tests + selftest + harness qemu
+  17/17 (`scripts/calc_qemu_check.py`).
 
 ## Uso rápido (PC/Deepin) — TODO EN UNO
 

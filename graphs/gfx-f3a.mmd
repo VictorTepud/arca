@@ -9,8 +9,8 @@ flowchart TD
         G --> E
     end
 
-    subgraph HIJO["devapp-demo · ELF static-pie musl (sin NDK)"]
-        H[stdin poll<br/>arca-sdk-ui input] -->|touch/ping/shutdown| I[Demo state<br/>física + botones]
+    subgraph HIJO["devapp-demo / devapp-calc · ELF static-pie musl (sin NDK)"]
+        H[stdin poll<br/>arca-sdk-ui input] -->|touch/ping/shutdown| I["estado de la sub-app<br/>demo: física + botones · calc: teclas y motor decimal"]
         I --> J[Canvas software<br/>arca-sdk-ui]
         J -->|paint_frame<br/>AFRM + bitmap| K[FrameSlots.begin_write<br/>publish seqlock]
         K -->|stdout {"event":"frame"}| F
